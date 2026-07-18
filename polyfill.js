@@ -1,5 +1,7 @@
 // public/polyfill.js
 // 🪄 POLYFILL: Substitui o google.script.run por chamadas fetch para a API da Vercel
+// Este arquivo deve ser carregado ANTES do scripts.js
+
 if (typeof window !== 'undefined') {
   window.google = window.google || {};
   window.google.script = window.google.script || {};
@@ -19,8 +21,10 @@ if (typeof window !== 'undefined') {
         
         // Intercepta qualquer chamada (ex: loadAll, addHistorico, saveSenhaSistema)
         return function(...args) {
+          // Pega o perfil atual (Lojas ou Matriz)
           const perfil = window._PERFIL ? window._PERFIL.nome : 'Lojas';
           
+          // Envia para a API da Vercel: /api/[nomeDaFuncao]
           fetch(`/api/${String(prop)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -36,14 +40,17 @@ if (typeof window !== 'undefined') {
             failureCb(err);
           });
           
-          return runner;
+          return runner; // Mantém a cadeia de métodos
         };
       }
     });
   };
 
+  // Define o getter para google.script.run
   Object.defineProperty(window.google.script, 'run', {
     get: () => createRunner(),
     configurable: true
   });
+  
+  console.log('[Polyfill] ✅ Sistema de interceptação carregado com sucesso!');
 }
