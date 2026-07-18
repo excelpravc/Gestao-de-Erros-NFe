@@ -1,1 +1,357 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>NFS — Sistema de Gestão de Erros</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="stylesheet" href="Styles.css">
+<style>
+tr.vencida {
+background: #3a1f1f !important;
+border-left: 4px solid #ff4d6d !important;
+}
+tr.proxima {
+background: #3a2f1f !important;
+border-left: 4px solid #f5a623 !important;
+}
+tr.vencida td, tr.proxima td {
+color: #ffe0e0 !important;
+}
+</style>
+</head>
+<body>
+<!-- ════════════ TELA DE SELEÇÃO DE PERFIL ════════════ -->
+<div id="tela-perfil" style="
+position:fixed;inset:0;display:flex;flex-direction:column;
+align-items:center;justify-content:center;gap:40px;z-index:10000;
+background-color:#080a0e;
+background-image:
+linear-gradient(135deg, #0a0a0a 0%, #111318 40%, #0d0f14 60%, #050507 100%),
+repeating-linear-gradient(
+60deg,
+transparent,
+transparent 80px,
+rgba(255,255,255,0.012) 80px,
+rgba(255,255,255,0.012) 81px
+);
+overflow:hidden;">
+<!-- Faixas metálicas animadas -->
+<div style="
+position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0">
+<!-- Faixa 1 — curva superior esquerda -->
+<div style="
+position:absolute;
+width:160%;height:160%;
+top:-55%;left:-35%;
+border-radius:50%;
+border:1.5px solid rgba(255,255,255,0.13);
+box-shadow:
+0 0 18px 2px rgba(255,255,255,0.07),
+inset 0 0 18px 2px rgba(255,255,255,0.04);
+transform:rotate(-18deg);
+background:transparent">
+</div>
+<!-- Faixa 2 — curva interna superior esquerda -->
+<div style="
+position:absolute;
+width:140%;height:140%;
+top:-45%;left:-28%;
+border-radius:50%;
+border:0.8px solid rgba(200,200,200,0.07);
+transform:rotate(-18deg);
+background:transparent">
+</div>
+<!-- Faixa 3 — curva direita luminosa -->
+<div style="
+position:absolute;
+width:80%;height:200%;
+top:-50%;right:-20%;
+border-radius:50%;
+border-right:2px solid rgba(255,255,255,0.18);
+border-top:1.5px solid rgba(255,255,255,0.10);
+box-shadow:
+2px 0 30px 4px rgba(255,255,255,0.06),
+0 0 60px 8px rgba(180,180,200,0.04);
+transform:rotate(12deg);
+background:transparent">
+</div>
+<!-- Faixa 4 — curva direita interna -->
+<div style="
+position:absolute;
+width:65%;height:180%;
+top:-40%;right:-12%;
+border-radius:50%;
+border-right:0.8px solid rgba(255,255,255,0.08);
+transform:rotate(12deg);
+background:transparent">
+</div>
+<!-- Brilho ponto superior direito -->
+<div style="
+position:absolute;
+top:18%;right:8%;
+width:6px;height:6px;
+border-radius:50%;
+background:rgba(255,255,255,0.85);
+box-shadow:
+0 0 8px 3px rgba(255,255,255,0.5),
+0 0 24px 8px rgba(255,255,255,0.15),
+0 0 60px 20px rgba(200,200,220,0.08);
+animation:starPulse 3s ease-in-out infinite">
+</div>
+<!-- Brilho ponto inferior direito -->
+<div style="
+position:absolute;
+top:72%;right:5%;
+width:4px;height:4px;
+border-radius:50%;
+background:rgba(255,255,255,0.7);
+box-shadow:
+0 0 6px 2px rgba(255,255,255,0.4),
+0 0 18px 6px rgba(255,255,255,0.12);
+animation:starPulse 4s ease-in-out infinite 1.2s">
+</div>
+<!-- Brilho ponto menor -->
+<div style="
+position:absolute;
+top:60%;right:6.5%;
+width:2px;height:2px;
+border-radius:50%;
+background:rgba(255,255,255,0.6);
+box-shadow:0 0 6px 2px rgba(255,255,255,0.3);
+animation:starPulse 2.5s ease-in-out infinite 0.6s">
+</div>
+<!-- Marca d'água  canto inferior direito -->
+<div style="
+position:absolute;bottom:18px;right:22px;
+font-size:1.4rem;color:rgba(255,255,255,0.12);
+user-select:none;line-height:1">✦</div>
+</div>
+<style>
+@keyframes starPulse {
+0%,100%{opacity:1;transform:scale(1);}
+50%{opacity:0.4;transform:scale(0.6);}
+}
+</style>
+<div style="text-align:center;">
+<div style="display:inline-block;background:var(--accent);color:#000;font-size:8.5px;
+font-weight:800;letter-spacing:2px;text-transform:uppercase;padding:3px 12px;
+border-radius:20px;margin-bottom:16px">Sistema NFe</div>
+<h1 style="font-size:2rem;font-weight:800;letter-spacing:-.5px;line-height:1.2;margin-bottom:8px">
+Gestão de <em style="color:var(--accent);font-style:normal">Erros</em>
+</h1>
+<p style="color:var(--muted);font-size:.82rem;font-family:'DM Mono',monospace">
+Selecione seu perfil para continuar
+</p>
+</div>
+<div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;">
+<div id="card-lojas" onclick="selecionarPerfil('Lojas')"
+style="background:var(--card2);border:2px solid #00d4aa30;border-radius:20px;
+padding:40px 52px;text-align:center;cursor:pointer;min-width:180px;
+transition:border-color .2s,transform .18s,box-shadow .2s;user-select:none;"
+onmouseenter="this.style.transform='translateY(-6px)';this.style.boxShadow='0 20px 50px #00000070';this.style.borderColor='#00d4aa';"
+onmouseleave="this.style.transform='';this.style.boxShadow='';this.style.borderColor='#00d4aa30';">
+<div style="font-size:3.8rem;margin-bottom:14px;line-height:1">🏪</div>
+<div style="font-size:1.1rem;font-weight:800;color:var(--text);letter-spacing:.5px">LOJAS</div>
+<div style="font-size:.65rem;color:var(--accent);font-family:'DM Mono',monospace;
+margin-top:6px;letter-spacing:1.5px;font-weight:700">SELECIONAR →</div>
+</div>
+<div id="card-matriz" onclick="selecionarPerfil('Matriz')"
+style="background:var(--card2);border:2px solid #4d9fff30;border-radius:20px;
+padding:40px 52px;text-align:center;cursor:pointer;min-width:180px;
+transition:border-color .2s,transform .18s,box-shadow .2s;user-select:none;"
+onmouseenter="this.style.transform='translateY(-6px)';this.style.boxShadow='0 20px 50px #00000070';this.style.borderColor='#4d9fff';"
+onmouseleave="this.style.transform='';this.style.boxShadow='';this.style.borderColor='#4d9fff30';">
+<div style="font-size:3.8rem;margin-bottom:14px;line-height:1">🏢</div>
+<div style="font-size:1.1rem;font-weight:800;color:var(--text);letter-spacing:.5px">MATRIZ</div>
+<div style="font-size:.65rem;color:#4d9fff;font-family:'DM Mono',monospace;
+margin-top:6px;letter-spacing:1.5px;font-weight:700">SELECIONAR →</div>
+</div>
+</div>
+<p style="color:var(--muted);font-family:'DM Mono',monospace;font-size:.68rem;opacity:.4">
+Versão 1.17 · Sistema de Gestão de Erros NFe
+</p>
+</div>
+<!-- ════════════ MODAL: VISUALIZAR OU EDITAR ════════════ -->
+<div id="modal-modo" style="position:fixed;inset:0;background:#00000095;backdrop-filter:blur(5px);
+display:none;align-items:center;justify-content:center;z-index:10500;padding:20px">
+<div style="background:#1a2236;border:1px solid #1e2d48;border-radius:20px;
+padding:32px;max-width:420px;width:100%;text-align:center;animation:fadeUp .2s ease both">
+<h3 style="font-size:1.05rem;font-weight:800;color:#00d4aa;margin-bottom:6px">
+Como deseja acessar?
+</h3>
+<p id="modal-modo-perfil" style="color:var(--muted);font-family:'DM Mono',monospace;font-size:.78rem;margin-bottom:22px"></p>
+<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+<button class="btn btn-o" style="flex:1;min-width:150px;padding:14px" onclick="_modoEscolhido('view')">
+👁 Visualizar
+</button>
+<button class="btn btn-p" style="flex:1;min-width:150px;padding:14px" onclick="_modoEscolhido('edit')">
+✏ Editar
+</button>
+</div>
+<button class="btn-ghost" style="margin-top:16px;width:100%" onclick="_fecharModalModo()">Cancelar</button>
+</div>
+</div>
+<!-- ════════════ MODAL: SENHA DE EDIÇÃO ═══════════ -->
+<div id="modal-senha" style="position:fixed;inset:0;background:#00000095;backdrop-filter:blur(5px);
+display:none;align-items:center;justify-content:center;z-index:10600;padding:20px">
+<div style="background:#1a2236;border:1px solid #1e2d48;border-radius:20px;
+padding:32px;max-width:380px;width:100%;text-align:center;animation:fadeUp .2s ease both">
+<h3 style="font-size:1rem;font-weight:800;color:#00d4aa;margin-bottom:14px">🔒 Senha de Edição</h3>
+<input type="password" id="senha-edicao-inp" placeholder="Digite a senha…" autocomplete="off"
+style="width:100%;text-align:center;font-size:1rem;letter-spacing:2px"
+onkeydown="if(event.key==='Enter')_validarSenhaEdicao()">
+<p id="senha-erro" style="display:none;color:var(--danger);font-size:.74rem;font-family:'DM Mono',monospace;margin-top:8px">
+✕ Senha incorreta
+</p>
+<div style="display:flex;gap:10px;margin-top:18px">
+<button class="btn btn-p" style="flex:1" onclick="_validarSenhaEdicao()">Confirmar</button>
+<button class="btn btn-o" style="flex:1" onclick="_fecharModalSenha()">Cancelar</button>
+</div>
+</div>
+</div>
+<script>
+// ════════════════════════════════════════════════════════════════
+//  SELEÇÃO DE PERFIL — sem reload, tudo na mesma sessão
+// ════════════════════════════════════════════════════════════════
+const _PERFIS_CFG = {
+'Lojas':  { nome:'Lojas',  emoji:'🏪', cor:'#00d4aa', histSheet:'Historico_Lojas'  },
+'Matriz': { nome:'Matriz', emoji:'🏢', cor:'#4d9fff', histSheet:'Historico_Matriz' },
+};
+// ── SENHA ÚNICA DE EDIÇÃO (mesma para Lojas e Matriz) ──
+// Valor inicial — será sobrescrito pela senha salva no servidor assim que carregar
+let SENHA_EDICAO = '@MANIFESTO';
+google.script.run
+.withSuccessHandler(function(v){ if (v) SENHA_EDICAO = v; })
+.withFailureHandler(function(){})
+.loadSenhaSistema();
+window._MODO_VISUALIZACAO = false;
+let _perfilPendente = '';
+function selecionarPerfil(nome) {
+_perfilPendente = nome;
+const cfg = _PERFIS_CFG[nome] || _PERFIS_CFG['Lojas'];
+const lbl = document.getElementById('modal-modo-perfil');
+if (lbl) lbl.textContent = 'Perfil selecionado: ' + cfg.emoji + ' ' + cfg.nome;
+document.getElementById('modal-modo').style.display = 'flex';
+}
+function _fecharModalModo() {
+document.getElementById('modal-modo').style.display = 'none';
+_perfilPendente = '';
+}
+function _modoEscolhido(modo) {
+document.getElementById('modal-modo').style.display = 'none';
+if (modo === 'view') {
+window._MODO_VISUALIZACAO = true;
+_prosseguirComPerfil(_perfilPendente);
+} else {
+document.getElementById('senha-edicao-inp').value = '';
+document.getElementById('senha-erro').style.display = 'none';
+document.getElementById('modal-senha').style.display = 'flex';
+setTimeout(() => document.getElementById('senha-edicao-inp').focus(), 80);
+}
+}
+function _fecharModalSenha() {
+document.getElementById('modal-senha').style.display = 'none';
+}
+function _validarSenhaEdicao() {
+const val = document.getElementById('senha-edicao-inp').value;
+if (val === SENHA_EDICAO) {
+window._MODO_VISUALIZACAO = false;
+document.getElementById('modal-senha').style.display = 'none';
+_prosseguirComPerfil(_perfilPendente);
+} else {
+document.getElementById('senha-erro').style.display = 'block';
+}
+}
+function _instalarGuardSomenteLeitura() {
+if (window._gsGuardInstalado) return;
+window._gsGuardInstalado = true;
+const realRun = google.script.run;
+function wrap(obj) {
+return new Proxy(obj, {
+get(target, prop) {
+if (prop === 'withSuccessHandler' || prop === 'withFailureHandler') {
+return function(...args) {
+return wrap(target[prop].apply(target, args));
+};
+}
+return function(...args) {
+const isLeitura = /^load/i.test(String(prop));
+if (window._MODO_VISUALIZACAO && !isLeitura) {
+if (typeof toast === 'function') toast('🔒 Modo Visualização: ação bloqueada', true);
+return target; // não executa a chamada real ao servidor
+}
+return target[prop].apply(target, args);
+};
+}
+});
+}
+Object.defineProperty(google.script, 'run', {
+get() { return wrap(realRun); },
+configurable: true
+});
+}
+function _prosseguirComPerfil(nome) {
+window._PERFIL = _PERFIS_CFG[nome] || _PERFIS_CFG['Lojas'];
+const tela = document.getElementById('tela-perfil');
+const load = document.getElementById('loading');
+if (tela) tela.style.display = 'none';
+if (load) load.style.display = 'flex';
+document.body.classList.toggle('modo-visualizacao', !!window._MODO_VISUALIZACAO);
+_instalarGuardSomenteLeitura();
+if (nome === 'Matriz') {
+if (typeof _aplicarPerfilMatriz === 'function') _aplicarPerfilMatriz();
+} else {
+if (typeof _aplicarPerfilLojas === 'function') _aplicarPerfilLojas();
+}
+_inicializarSistema();
+}
+function _inicializarSistema() {
+const p = window._PERFIL;
+if (typeof _atualizarBadgeUsuario === 'function') _atualizarBadgeUsuario(p.nome, p.emoji, p.cor);
+if (typeof loadCfg === 'function') loadCfg();
+if (typeof initSaudacao === 'function') initSaudacao();
+google.script.run
+.withSuccessHandler(function(d) {
+if (typeof applyData === 'function') applyData(d);
+google.script.run
+.withSuccessHandler(function(ass) {
+if (ass && typeof applyCfgFromSheet === 'function') applyCfgFromSheet(ass);
+if (typeof hide === 'function') hide('loading');
+document.dispatchEvent(new Event('_sistemaCarregado'));
+})
+.withFailureHandler(function() {
+if (typeof hide === 'function') hide('loading');
+document.dispatchEvent(new Event('_sistemaCarregado'));
+})
+.loadAssinatura(p.nome);
+})
+.withFailureHandler(function(e) {
+if (typeof toast === 'function') toast('Erro ao carregar: ' + e.message, true);
+if (typeof hide === 'function') hide('loading');
+})
+.loadAll(p.nome);
+}
+// Na primeira carga: mostra tela de seleção, esconde loading
+// O sistema SÓ carrega após o usuário clicar em um perfil
+document.addEventListener('DOMContentLoaded', function() {
+const tela = document.getElementById('tela-perfil');
+const load = document.getElementById('loading');
+if (tela) tela.style.display = 'flex';
+if (load) load.style.display = 'none';
+// _PERFIL começa vazio — será definido em selecionarPerfil()
+window._PERFIL = null;
+});
+</script>
+<div id="loading"><div class="spinner"></div><div class="ltxt">Carregando sistema…</div></div>
 
+[O arquivo continua com todo o HTML do sistema - sidebar, main content, etc.]
+
+<!-- O restante do HTML continua igual ao que você já tem -->
+</body>
+</html>
