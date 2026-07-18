@@ -61,10 +61,14 @@ export async function POST(req: NextRequest, { params }: { params: { action: str
     }
 
     // ==================== HISTÓRICO ====================
-    if (action === 'loadHistFiltrado') {
+        if (action === 'loadHistFiltrado') {
       const [de, ate] = args;
       const colHist = getCol('historico', perfil);
-      let q = db.collection(colHist);
+      
+      // CORREÇÃO: Tipamos 'q' como Query do Firestore. 
+      // CollectionReference estende Query, então a atribuição inicial é válida,
+      // e o TypeScript permite as reatribuições com .where() sem erros.
+      let q: FirebaseFirestore.Query = db.collection(colHist);
       
       if (de) q = q.where('dataISO', '>=', de);
       if (ate) q = q.where('dataISO', '<=', ate + 'T23:59:59');
