@@ -1,0 +1,33 @@
+# Dependências
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Variáveis de ambiente (SENSÍVEL - nunca subir)
+.env.local
+.env*.local
+
+# Arquivos de build
+build/
+dist/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Firebase (se houver chave local)
+*.json
+!package.json
+!tsconfig.json
