@@ -184,7 +184,6 @@ function abrirImportExcel(tipo) {
   document.getElementById('import-title').textContent = '📥 ' + cfg.titulo;
   document.getElementById('import-hint').textContent = cfg.dica;
   document.getElementById('import-file-input').value = '';
-  document.getElementById('import-drop-label').textContent = 'Arraste a planilha aqui ou clique para selecionar';
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-preview').innerHTML = '';
   document.getElementById('import-progress-wrap').style.display = 'none';
@@ -199,27 +198,12 @@ function fecharImportExcel() {
   _importState = { tipo: null, rows: [] };
 }
 
-function importDragOver(e) { e.preventDefault(); const d = document.getElementById('import-drop'); if (d) d.classList.add('drag-over'); }
-function importDragLeave(e) { const d = document.getElementById('import-drop'); if (d) d.classList.remove('drag-over'); }
-function importDrop(e) {
-  e.preventDefault();
-  importDragLeave(e);
-  const files = e.dataTransfer.files;
-  if (files && files.length) processarArquivoImport(files[0]);
-}
-
 function onImportExcelFile(e) {
   const file = e.target.files && e.target.files[0];
-  if (file) processarArquivoImport(file);
-}
-
-function processarArquivoImport(file) {
+  if (!file) return;
   const cfg = IMPORT_CFG[_importState.tipo];
   if (!cfg) return;
   if (typeof XLSX === 'undefined') { toast('⚠️ Biblioteca de Excel não carregada.', true); return; }
-
-  const lbl = document.getElementById('import-drop-label');
-  if (lbl) lbl.textContent = '📄 ' + file.name;
 
   const reader = new FileReader();
   reader.onload = function (ev) {
