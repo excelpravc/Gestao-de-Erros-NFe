@@ -176,6 +176,22 @@
     return _update(COLLECTIONS.grupoLoja, data);
   }
 
+  // ── Limpeza em lote de uma coleção inteira (usado pelo botão "Limpar Base") ──
+  async function limparColecao(collName) {
+    const db = getDb();
+    const snap = await db.collection(collName).get();
+    const docs = snap.docs;
+    const CHUNK = 450; // limite do Firestore é 500 operações por batch
+    for (let i = 0; i < docs.length; i += CHUNK) {
+      const batch = db.batch();
+      docs.slice(i, i + CHUNK).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    // Reseta o contador de ID para essa coleção, para a próxima importação começar do 1
+    await db.collection('_counters').doc(collName).delete().catch(() => {});
+    return { ok: true, removidos: docs.length };
+  }
+
   // ── loadAll: junta todas as coleções + histórico do perfil ativo ──
   async function loadAll(perfil) {
     const [compradores, comerciais, lojas, manifestos, codErros, fornecedores, historico, regras, justificativas, gruposLoja] =
@@ -225,7 +241,8 @@
     deleteJustificativa: (id) => _delete(COLLECTIONS.justificativa, id),
     saveGrupoLoja,
     deleteGrupoLoja: (id) => _delete(COLLECTIONS.grupoLoja, id),
-    loadSenhaSistema, saveSenhaSistema
+    loadSenhaSistema, saveSenhaSistema,
+    limparColecao
   };
 
   // ── Proxy que imita a API do google.script.run ──
