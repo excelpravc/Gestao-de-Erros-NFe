@@ -74,8 +74,14 @@
   }
 
   // ── Histórico (particionado por perfil) ──
+  function _hojeBR() {
+    const d = new Date();
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+  }
   async function addHistorico(data) {
-    return _add(_histColl(data && data.perfil), data);
+    const payload = Object.assign({}, data);
+    if (!payload.data) payload.data = _hojeBR();
+    return _add(_histColl(payload.perfil), payload);
   }
   async function updateHistorico(data) {
     return _update(_histColl(data && data.perfil), data);
