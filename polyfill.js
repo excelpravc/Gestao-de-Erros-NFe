@@ -176,6 +176,38 @@
     return _update(COLLECTIONS.grupoLoja, data);
   }
 
+  // ── Importação em massa (usada pelo botão "Importar Excel") ──
+  // Em vez de 1 transação + 1 gravação POR LINHA (lento e frágil para milhares
+  // de registros), reserva um bloco de IDs numa única transação e grava tudo
+  // em lotes de até 450 documentos por chamada de batch.
+  async function importarEmMassa(collName, rows) {
+    const db = getDb();
+    if (!rows || !rows.length) return { ok: true, importados: 0 };
+
+    const counterRef = db.collection('_counters').doc(collName);
+    const idInicial = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(counterRef);
+      const atual = snap.exists ? (Number(snap.data().value) || 0) : 0;
+      tx.set(counterRef, { value: atual + rows.length });
+      return atual + 1;
+    });
+
+    const CHUNK = 450; // limite do Firestore é 500 operações por batch
+    let importados = 0;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const batch = db.batch();
+      const parte = rows.slice(i, i + CHUNK);
+      parte.forEach((row, j) => {
+        const id = idInicial + i + j;
+        const payload = Object.assign({}, row, { id });
+        batch.set(db.collection(collName).doc(String(id)), payload);
+      });
+      await batch.commit();
+      importados += parte.length;
+    }
+    return { ok: true, importados, idInicial };
+  }
+
   // ── Limpeza em lote de uma coleção inteira (usado pelo botão "Limpar Base") ──
   async function limparColecao(collName) {
     const db = getDb();
@@ -242,7 +274,7 @@
     saveGrupoLoja,
     deleteGrupoLoja: (id) => _delete(COLLECTIONS.grupoLoja, id),
     loadSenhaSistema, saveSenhaSistema,
-    limparColecao
+    limparColecao, importarEmMassa
   };
 
   // ── Proxy que imita a API do google.script.run ──
