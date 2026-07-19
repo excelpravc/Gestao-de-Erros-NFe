@@ -15,9 +15,9 @@
 //  5) Colar os 3 valores abaixo, no lugar de "COLE_AQUI..."
 // ════════════════════════════════════════════════════════════════
 
-const EMAILJS_PUBLIC_KEY  = 'COLE_AQUI_A_PUBLIC_KEY';
-const EMAILJS_SERVICE_ID  = 'COLE_AQUI_O_SERVICE_ID';
-const EMAILJS_TEMPLATE_ID = 'COLE_AQUI_O_TEMPLATE_ID';
+const EMAILJS_PUBLIC_KEY  = 'uCImJNqUIu1zlBVrR';
+const EMAILJS_SERVICE_ID  = 'service_yfqzhrh';
+const EMAILJS_TEMPLATE_ID = 'template_9f1i6ep';
 
 if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY.indexOf('COLE_AQUI') === -1) {
   emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
