@@ -177,9 +177,9 @@
   }
 
   // ── Importação em massa (usada pelo botão "Importar Excel") ──
-  // Em vez de 1 transação + 1 gravação POR LINHA (lento e frágil para milhares
-  // de registros), reserva um bloco de IDs numa única transação e grava tudo
-  // em lotes de até 450 documentos por chamada de batch.
+  // Reserva um bloco de IDs numa única transação e grava tudo em lotes de
+  // até 450 documentos por chamada de batch, em vez de 1 transação + 1
+  // gravação por linha (o que travava com milhares de registros).
   async function importarEmMassa(collName, rows) {
     const db = getDb();
     if (!rows || !rows.length) return { ok: true, importados: 0 };
