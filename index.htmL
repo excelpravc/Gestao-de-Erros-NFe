@@ -1037,7 +1037,9 @@ onkeydown="if(event.key==='Enter')salvarNovoForn()">
 <div class="ph">
 <div class="ph-left"><h1>📂 <em>Histórico</em></h1><p>Registros do período selecionado</p></div>
 <div style="display:flex;gap:8px">
-<button class="btn btn-o" onclick="abrirImportExcel('historico')">📥 Importar Excel</button>
+<button class="btn btn-o" onclick="abrirImportExcel('historico')">📥 Importar</button>
+<button class="btn btn-o" onclick="exportarExcel('historico')">📤 Exportar</button>
+<button class="btn btn-d" onclick="abrirLimparBanco('historico')">🗑️ Limpar</button>
 <button class="btn btn-o" onclick="imprimirHist()">🖨 PDF</button>
 </div>
 </div>
@@ -1172,7 +1174,9 @@ onkeydown="acHistFornKey(event)">
 <input type="text" id="erros-busca" placeholder="🔍 Buscar por código ou descrição…"
 style="width:280px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarErros(this.value)">
-<button class="btn btn-o btn-sm" onclick="abrirImportExcel('codErro')">📥 Excel</button>
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('codErro')">📥 Importar</button>
+<button class="btn btn-o btn-sm" onclick="exportarExcel('codErro')">📤 Exportar</button>
+<button class="btn btn-d btn-sm" onclick="abrirLimparBanco('codErro')">🗑️ Limpar</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap">
@@ -1199,7 +1203,9 @@ oninput="filtrarErros(this.value)">
 <input type="text" id="forn-busca" placeholder="🔍 Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarForn(this.value)">
-<button class="btn btn-o btn-sm" onclick="abrirImportExcel('fornecedor')">📥 Excel</button>
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('fornecedor')">📥 Importar</button>
+<button class="btn btn-o btn-sm" onclick="exportarExcel('fornecedor')">📤 Exportar</button>
+<button class="btn btn-d btn-sm" onclick="abrirLimparBanco('fornecedor')">🗑️ Limpar</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Código</th><th>Nome</th><th>Ações</th></tr></thead><tbody id="tb-forn"></tbody></table></div>
@@ -1223,7 +1229,9 @@ oninput="filtrarForn(this.value)">
 <input type="text" id="comp-busca" placeholder="🔍 Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarComp(this.value)">
-<button class="btn btn-o btn-sm" onclick="abrirImportExcel('comprador')">📥 Excel</button>
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('comprador')">📥 Importar</button>
+<button class="btn btn-o btn-sm" onclick="exportarExcel('comprador')">📤 Exportar</button>
+<button class="btn btn-d btn-sm" onclick="abrirLimparBanco('comprador')">🗑️ Limpar</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Ações</th></tr></thead><tbody id="tb-comp"></tbody></table></div>
@@ -1247,7 +1255,9 @@ oninput="filtrarComp(this.value)">
 <input type="text" id="comerc-busca" placeholder="🔍 Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarComerc(this.value)">
-<button class="btn btn-o btn-sm" onclick="abrirImportExcel('comercial')">📥 Excel</button>
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('comercial')">📥 Importar</button>
+<button class="btn btn-o btn-sm" onclick="exportarExcel('comercial')">📤 Exportar</button>
+<button class="btn btn-d btn-sm" onclick="abrirLimparBanco('comercial')">🗑️ Limpar</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Ações</th></tr></thead><tbody id="tb-comerc"></tbody></table></div>
@@ -1271,7 +1281,9 @@ oninput="filtrarComerc(this.value)">
 <input type="text" id="loja-busca" placeholder="🔍 Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarLoja(this.value)">
-<button class="btn btn-o btn-sm" onclick="abrirImportExcel('loja')">📥 Excel</button>
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('loja')">📥 Importar</button>
+<button class="btn btn-o btn-sm" onclick="exportarExcel('loja')">📤 Exportar</button>
+<button class="btn btn-d btn-sm" onclick="abrirLimparBanco('loja')">🗑️ Limpar</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Ações</th></tr></thead><tbody id="tb-loja"></tbody></table></div>
@@ -1295,7 +1307,9 @@ oninput="filtrarLoja(this.value)">
 <input type="text" id="manif-busca" placeholder=" Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarManif(this.value)">
-<button class="btn btn-o btn-sm" onclick="abrirImportExcel('manifesto')">📥 Excel</button>
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('manifesto')">📥 Importar</button>
+<button class="btn btn-o btn-sm" onclick="exportarExcel('manifesto')">📤 Exportar</button>
+<button class="btn btn-d btn-sm" onclick="abrirLimparBanco('manifesto')">🗑️ Limpar</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Ações</th></tr></thead><tbody id="tb-manif"></tbody></table></div>
@@ -1318,7 +1332,9 @@ onkeydown="if(event.key==='Enter')addJust()">
 <div class="card">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
 <div class="sec-title" style="margin-bottom:0;flex:1">Lista de Justificativas</div>
-<button class="btn btn-o btn-sm" onclick="abrirImportExcel('justificativa')">📥 Excel</button>
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('justificativa')">📥 Importar</button>
+<button class="btn btn-o btn-sm" onclick="exportarExcel('justificativa')">📤 Exportar</button>
+<button class="btn btn-d btn-sm" onclick="abrirLimparBanco('justificativa')">🗑️ Limpar</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <p style="font-size:.74rem;color:var(--muted);margin-bottom:14px;font-family:'DM Mono',monospace">
@@ -1692,6 +1708,22 @@ style="width:100%;padding:10px;background:var(--inp);border:1px solid var(--inpb
 <div class="modal-btns">
 <button class="btn btn-p" id="import-confirm-btn" onclick="confirmarImportExcel()" disabled>Confirmar Importação</button>
 <button class="btn btn-o" onclick="fecharImportExcel()">Cancelar</button>
+</div>
+</div>
+</div>
+
+<!-- ═══════════ MODAL: LIMPAR BASE (genérico, exige senha) ═══════════ -->
+<div class="modal-bg" id="modal-limpar">
+<div class="modal-box" style="max-width:420px;text-align:center">
+<h3 style="color:var(--danger)">⚠️ Limpar Base</h3>
+<p id="limpar-msg" style="color:var(--muted);font-family:'DM Mono',monospace;font-size:.78rem;line-height:1.6;margin-bottom:18px;text-align:left"></p>
+<input type="password" id="limpar-senha-inp" placeholder="Senha do sistema…" autocomplete="off"
+style="width:100%;text-align:center;font-size:1rem;letter-spacing:2px"
+onkeydown="if(event.key==='Enter')confirmarLimparBanco()">
+<p id="limpar-senha-erro" style="display:none;color:var(--danger);font-size:.74rem;font-family:'DM Mono',monospace;margin-top:8px">✕ Senha incorreta</p>
+<div class="modal-btns" style="justify-content:center">
+<button class="btn btn-d" id="limpar-confirm-btn" onclick="confirmarLimparBanco()">Confirmar Limpeza</button>
+<button class="btn btn-o" onclick="fecharLimparBanco()">Cancelar</button>
 </div>
 </div>
 </div>
