@@ -259,3 +259,87 @@ async function confirmarImportExcel() {
   fecharImportExcel();
   toast('✓ Importação concluída: ' + ok + ' registro(s) importado(s)' + (falha ? ', ' + falha + ' com falha' : '') + '!');
 }
+
+// ════════════════════════════════════════════════════════════════
+//  EXPORTAR EXCEL — baixa a lista atual (DB) como .xlsx
+// ════════════════════════════════════════════════════════════════
+function exportarExcel(tipo) {
+  if (typeof XLSX === 'undefined') { toast('⚠️ Biblioteca de Excel não carregada.', true); return; }
+  const dbKey = DB_KEY_POR_TIPO[tipo];
+  const rows = (DB[dbKey] || []).map(r => {
+    const copia = Object.assign({}, r);
+    delete copia.perfil; // campo interno, não precisa ir pra planilha
+    return copia;
+  });
+  if (!rows.length) { toast('Nada para exportar — a lista está vazia.', true); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  const nomeAba = (IMPORT_CFG[tipo] ? IMPORT_CFG[tipo].titulo.replace('Importar ', '') : tipo).slice(0, 31);
+  XLSX.utils.book_append_sheet(wb, ws, nomeAba);
+  const nomeArquivo = nomeAba.replace(/\s+/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+  XLSX.writeFile(wb, nomeArquivo);
+  toast('✓ Exportado: ' + nomeArquivo);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  LIMPAR BASE — apaga todos os registros de uma coleção no Firestore,
+//  exigindo a senha do sistema (a mesma usada para entrar em modo Edição).
+// ════════════════════════════════════════════════════════════════
+function _colecaoFirestore(tipo) {
+  const map = {
+    codErro: 'codErros', fornecedor: 'fornecedores', comprador: 'compradores',
+    comercial: 'comerciais', loja: 'lojas', manifesto: 'manifestos', justificativa: 'justificativas'
+  };
+  if (tipo === 'historico') {
+    return (_perfilAtivo().toLowerCase() === 'matriz') ? 'Historico_Matriz' : 'Historico_Lojas';
+  }
+  return map[tipo];
+}
+
+let _limparTipoAtual = null;
+
+function abrirLimparBanco(tipo) {
+  _limparTipoAtual = tipo;
+  const dbKey = DB_KEY_POR_TIPO[tipo];
+  const total = (DB[dbKey] || []).length;
+  const nomeLista = IMPORT_CFG[tipo] ? IMPORT_CFG[tipo].titulo.replace('Importar ', '') : tipo;
+  document.getElementById('limpar-msg').textContent =
+    'Isso vai apagar PERMANENTEMENTE ' + total + ' registro(s) de "' + nomeLista + '". Essa ação não pode ser desfeita. Digite a senha do sistema para confirmar.';
+  document.getElementById('limpar-senha-inp').value = '';
+  document.getElementById('limpar-senha-erro').style.display = 'none';
+  document.getElementById('limpar-confirm-btn').disabled = false;
+  document.getElementById('limpar-confirm-btn').textContent = 'Confirmar Limpeza';
+  document.getElementById('modal-limpar').classList.add('open');
+  setTimeout(() => document.getElementById('limpar-senha-inp').focus(), 80);
+}
+
+function fecharLimparBanco() {
+  document.getElementById('modal-limpar').classList.remove('open');
+  _limparTipoAtual = null;
+}
+
+async function confirmarLimparBanco() {
+  const senha = document.getElementById('limpar-senha-inp').value;
+  if (senha !== SENHA_EDICAO) {
+    document.getElementById('limpar-senha-erro').style.display = 'block';
+    return;
+  }
+  const tipo = _limparTipoAtual;
+  if (!tipo) return;
+  const btn = document.getElementById('limpar-confirm-btn');
+  btn.disabled = true; btn.textContent = '⏳ Limpando…';
+  try {
+    const coll = _colecaoFirestore(tipo);
+    const r = await new Promise((resolve, reject) => {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).limparColecao(coll);
+    });
+    const dbKey = DB_KEY_POR_TIPO[tipo];
+    DB[dbKey] = [];
+    if (IMPORT_CFG[tipo]) IMPORT_CFG[tipo].depois();
+    toast('✓ Base limpa! ' + ((r && r.removidos) || 0) + ' registro(s) removido(s).');
+    fecharLimparBanco();
+  } catch (e) {
+    toast('Erro ao limpar: ' + e.message, true);
+    btn.disabled = false; btn.textContent = 'Confirmar Limpeza';
+  }
+}
