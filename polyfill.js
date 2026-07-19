@@ -150,6 +150,18 @@
     return { ok: true };
   }
 
+  // ── E-mail de recuperação da senha do sistema ──
+  async function loadEmailRecuperacao() {
+    const db = getDb();
+    const snap = await db.collection('config').doc('sistema').get();
+    return snap.exists ? (snap.data().emailRecuperacao || null) : null;
+  }
+  async function saveEmailRecuperacao(email) {
+    const db = getDb();
+    await db.collection('config').doc('sistema').set({ emailRecuperacao: String(email || '').trim() }, { merge: true });
+    return { ok: true };
+  }
+
   // ── Regras de destinatários por erro ──
   async function saveAllRegras(regrasArray) {
     const hoje = new Date().toLocaleDateString('pt-BR');
@@ -274,6 +286,7 @@
     saveGrupoLoja,
     deleteGrupoLoja: (id) => _delete(COLLECTIONS.grupoLoja, id),
     loadSenhaSistema, saveSenhaSistema,
+    loadEmailRecuperacao, saveEmailRecuperacao,
     limparColecao, importarEmMassa
   };
 
@@ -291,6 +304,9 @@
           .then(result => { if (ok) ok(result); })
           .catch(err => {
             console.error(`[Polyfill/Firestore] Erro em ${name}:`, err);
+            if (err && (err.code === 'resource-exhausted' || /quota/i.test(String(err.message || err)))) {
+              err.message = 'A cota gratuita diária do Firebase foi atingida. Tente novamente mais tarde (ela reseta por volta da meia-noite no horário do Pacífico — geralmente 4h–5h da manhã no horário de Brasília) ou faça upgrade do projeto para o plano Blaze no Console do Firebase.';
+            }
             if (fail) fail(err); else throw err;
           });
         return makeProxy(); // nova instância limpa para a próxima chamada encadeada
