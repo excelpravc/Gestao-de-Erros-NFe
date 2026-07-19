@@ -280,34 +280,33 @@ async function confirmarImportExcel() {
   const btn = document.getElementById('import-confirm-btn');
   btn.disabled = true; btn.textContent = '⏳ Importando…';
   const pw = document.getElementById('import-progress-wrap'), pf = document.getElementById('import-progress-fill');
-  pw.style.display = 'block'; pf.style.width = '0%';
+  pw.style.display = 'block'; pf.style.width = '15%';
 
-  let ok = 0, falha = 0;
-  const total = _importState.rows.length;
   const perfil = _perfilAtivo();
+  const payloads = _importState.rows.map(row => cfg.montar(row, perfil));
+  const coll = _colecaoFirestore(_importState.tipo);
 
-  for (let i = 0; i < total; i++) {
-    const payload = cfg.montar(_importState.rows[i], perfil);
-    try {
-      const r = await new Promise((resolve, reject) => {
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[cfg.addFn](payload);
-      });
-      if (r && r.ok) {
-        ok++;
-        const dbKey = DB_KEY_POR_TIPO[_importState.tipo];
-        if (dbKey) DB[dbKey].push(Object.assign({}, payload, { id: r.id }));
-      } else falha++;
-    } catch (e) {
-      falha++;
-      console.error('Erro ao importar linha', i, e);
+  try {
+    const r = await new Promise((resolve, reject) => {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).importarEmMassa(coll, payloads);
+    });
+    pf.style.width = '100%';
+
+    const dbKey = DB_KEY_POR_TIPO[_importState.tipo];
+    if (r && r.ok) {
+      const idIni = r.idInicial || 1;
+      payloads.forEach((p, i) => DB[dbKey].push(Object.assign({}, p, { id: idIni + i })));
     }
-    pf.style.width = Math.round(((i + 1) / total) * 100) + '%';
-  }
 
-  btn.textContent = 'Confirmar Importação'; btn.disabled = false;
-  cfg.depois();
-  fecharImportExcel();
-  toast('✓ Importação concluída: ' + ok + ' registro(s) importado(s)' + (falha ? ', ' + falha + ' com falha' : '') + '!');
+    btn.textContent = 'Confirmar Importação'; btn.disabled = false;
+    cfg.depois();
+    fecharImportExcel();
+    toast('✓ Importação concluída: ' + ((r && r.importados) || 0) + ' registro(s) importado(s)!');
+  } catch (e) {
+    console.error('Erro ao importar em massa:', e);
+    btn.textContent = 'Confirmar Importação'; btn.disabled = false;
+    toast('Erro ao importar: ' + (e && e.message ? e.message : e), true);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
