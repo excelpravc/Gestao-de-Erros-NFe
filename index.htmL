@@ -1036,7 +1036,10 @@ onkeydown="if(event.key==='Enter')salvarNovoForn()">
 <div class="page" id="p-hist">
 <div class="ph">
 <div class="ph-left"><h1>📂 <em>Histórico</em></h1><p>Registros do período selecionado</p></div>
+<div style="display:flex;gap:8px">
+<button class="btn btn-o" onclick="abrirImportExcel('historico')">📥 Importar Excel</button>
 <button class="btn btn-o" onclick="imprimirHist()">🖨 PDF</button>
+</div>
 </div>
 <div class="card card-sm" style="margin-bottom:14px">
 <div class="sec-title">Filtros de Pesquisa</div>
@@ -1169,6 +1172,7 @@ onkeydown="acHistFornKey(event)">
 <input type="text" id="erros-busca" placeholder="🔍 Buscar por código ou descrição…"
 style="width:280px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarErros(this.value)">
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('codErro')">📥 Excel</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap">
@@ -1195,7 +1199,8 @@ oninput="filtrarErros(this.value)">
 <input type="text" id="forn-busca" placeholder="🔍 Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarForn(this.value)">
-<button class="btn btn-o btn-sm" onclick="reloadAll()"></button>
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('fornecedor')">📥 Excel</button>
+<button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Código</th><th>Nome</th><th>Ações</th></tr></thead><tbody id="tb-forn"></tbody></table></div>
 </div>
@@ -1218,6 +1223,7 @@ oninput="filtrarForn(this.value)">
 <input type="text" id="comp-busca" placeholder="🔍 Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarComp(this.value)">
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('comprador')">📥 Excel</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Ações</th></tr></thead><tbody id="tb-comp"></tbody></table></div>
@@ -1241,6 +1247,7 @@ oninput="filtrarComp(this.value)">
 <input type="text" id="comerc-busca" placeholder="🔍 Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarComerc(this.value)">
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('comercial')">📥 Excel</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Ações</th></tr></thead><tbody id="tb-comerc"></tbody></table></div>
@@ -1264,6 +1271,7 @@ oninput="filtrarComerc(this.value)">
 <input type="text" id="loja-busca" placeholder="🔍 Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarLoja(this.value)">
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('loja')">📥 Excel</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Ações</th></tr></thead><tbody id="tb-loja"></tbody></table></div>
@@ -1287,6 +1295,7 @@ oninput="filtrarLoja(this.value)">
 <input type="text" id="manif-busca" placeholder=" Buscar por nome…"
 style="width:260px;padding:7px 12px;font-family:'DM Mono',monospace;font-size:.82rem"
 oninput="filtrarManif(this.value)">
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('manifesto')">📥 Excel</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Ações</th></tr></thead><tbody id="tb-manif"></tbody></table></div>
@@ -1309,6 +1318,7 @@ onkeydown="if(event.key==='Enter')addJust()">
 <div class="card">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
 <div class="sec-title" style="margin-bottom:0;flex:1">Lista de Justificativas</div>
+<button class="btn btn-o btn-sm" onclick="abrirImportExcel('justificativa')">📥 Excel</button>
 <button class="btn btn-o btn-sm" onclick="reloadAll()">⟳</button>
 </div>
 <p style="font-size:.74rem;color:var(--muted);margin-bottom:14px;font-family:'DM Mono',monospace">
@@ -1668,6 +1678,23 @@ border:1px solid #00d4aa30;background:#00d4aa08;color:var(--muted2);line-height:
 </div><!-- /#p-mva -->
 
 </main><!-- /main -->
+<!-- ═══════════ MODAL: IMPORTAR EXCEL (genérico) ═══════════ -->
+<div class="modal-bg" id="modal-import">
+<div class="modal-box" style="max-width:520px">
+<h3 id="import-title">📥 Importar Excel</h3>
+<input type="file" id="import-file-input" accept=".xlsx,.xls,.csv" onchange="onImportExcelFile(event)"
+style="width:100%;padding:10px;background:var(--inp);border:1px solid var(--inpb);border-radius:var(--r);color:var(--text);font-family:'DM Mono',monospace;font-size:.78rem">
+<p id="import-hint" style="font-size:.72rem;color:var(--muted);margin:8px 0 14px;font-family:'DM Mono',monospace;line-height:1.6"></p>
+<div id="import-preview" style="display:none;background:var(--inp);border:1px solid var(--inpb);border-radius:var(--r);padding:12px 14px;margin-bottom:14px;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted2);word-break:break-word"></div>
+<div id="import-progress-wrap" style="display:none;height:6px;background:var(--inp);border-radius:6px;overflow:hidden;margin-bottom:14px">
+<div id="import-progress-fill" style="height:100%;width:0%;background:var(--accent);transition:width .2s"></div>
+</div>
+<div class="modal-btns">
+<button class="btn btn-p" id="import-confirm-btn" onclick="confirmarImportExcel()" disabled>Confirmar Importação</button>
+<button class="btn btn-o" onclick="fecharImportExcel()">Cancelar</button>
+</div>
+</div>
+</div>
 
 <div class="cfbg" id="cfbg">
 <div class="cfbox">
@@ -1695,5 +1722,6 @@ border:1px solid #00d4aa30;background:#00d4aa08;color:var(--muted2);line-height:
 <script src="Perfil_Lojas.js"></script>
 <script src="Perfil_Matriz.js"></script>
 <script src="scripts.js"></script>
+<script src="ImportExcel.js"></script>
 </body>
 </html>
