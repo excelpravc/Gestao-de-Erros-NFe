@@ -8,18 +8,48 @@
 
 function _normalizarDataImport(v) {
   if (v === undefined || v === null || v === '') return '';
+
+  // Já veio como objeto Date (quando lemos com cellDates:true) — caminho mais confiável
   if (v instanceof Date && !isNaN(v)) {
     return String(v.getDate()).padStart(2, '0') + '/' + String(v.getMonth() + 1).padStart(2, '0') + '/' + v.getFullYear();
   }
-  const s = String(v).trim();
-  if (!s) return '';
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) { const p = s.slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
-  const num = Number(s);
-  if (!isNaN(num) && num > 20000 && num < 60000) {
-    const dt = new Date(Math.round((num - 25569) * 86400 * 1000));
+
+  // Veio como número de série do Excel (dias desde 1899-12-30)
+  if (typeof v === 'number' && v > 20000 && v < 60000) {
+    if (typeof XLSX !== 'undefined' && XLSX.SSF && XLSX.SSF.parse_date_code) {
+      const dc = XLSX.SSF.parse_date_code(v);
+      if (dc) return String(dc.d).padStart(2, '0') + '/' + String(dc.m).padStart(2, '0') + '/' + dc.y;
+    }
+    const dt = new Date(Math.round((v - 25569) * 86400 * 1000));
     return String(dt.getUTCDate()).padStart(2, '0') + '/' + String(dt.getUTCMonth() + 1).padStart(2, '0') + '/' + dt.getUTCFullYear();
   }
+
+  const s = String(v).trim();
+  if (!s) return '';
+
+  // yyyy-mm-dd (ISO)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const p = s.slice(0, 10).split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+
+  // dd/mm/aaaa OU mm/dd/aaaa (ano com 4 dígitos) — detecta formato americano pelo 2º número > 12
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    let a = Number(m[1]), b = Number(m[2]), ano = m[3];
+    if (a <= 12 && b > 12) { const t = a; a = b; b = t; } // era M/D/AAAA (americano) → inverte
+    return String(a).padStart(2, '0') + '/' + String(b).padStart(2, '0') + '/' + ano;
+  }
+
+  // dd/mm/aa OU mm/dd/aa (ano com 2 dígitos) — ex: "4/28/26"
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if (m) {
+    let a = Number(m[1]), b = Number(m[2]);
+    const ano = (Number(m[3]) <= 79 ? '20' : '19') + m[3].padStart(2, '0');
+    if (a <= 12 && b > 12) { const t = a; a = b; b = t; } // era M/D/AA (americano) → inverte
+    return String(a).padStart(2, '0') + '/' + String(b).padStart(2, '0') + '/' + ano;
+  }
+
   return s;
 }
 
@@ -154,6 +184,7 @@ function abrirImportExcel(tipo) {
   document.getElementById('import-title').textContent = '📥 ' + cfg.titulo;
   document.getElementById('import-hint').textContent = cfg.dica;
   document.getElementById('import-file-input').value = '';
+  document.getElementById('import-drop-label').textContent = 'Arraste a planilha aqui ou clique para selecionar';
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-preview').innerHTML = '';
   document.getElementById('import-progress-wrap').style.display = 'none';
@@ -168,19 +199,37 @@ function fecharImportExcel() {
   _importState = { tipo: null, rows: [] };
 }
 
+function importDragOver(e) { e.preventDefault(); const d = document.getElementById('import-drop'); if (d) d.classList.add('drag-over'); }
+function importDragLeave(e) { const d = document.getElementById('import-drop'); if (d) d.classList.remove('drag-over'); }
+function importDrop(e) {
+  e.preventDefault();
+  importDragLeave(e);
+  const files = e.dataTransfer.files;
+  if (files && files.length) processarArquivoImport(files[0]);
+}
+
 function onImportExcelFile(e) {
   const file = e.target.files && e.target.files[0];
-  if (!file) return;
+  if (file) processarArquivoImport(file);
+}
+
+function processarArquivoImport(file) {
   const cfg = IMPORT_CFG[_importState.tipo];
   if (!cfg) return;
   if (typeof XLSX === 'undefined') { toast('⚠️ Biblioteca de Excel não carregada.', true); return; }
 
+  const lbl = document.getElementById('import-drop-label');
+  if (lbl) lbl.textContent = '📄 ' + file.name;
+
   const reader = new FileReader();
   reader.onload = function (ev) {
     try {
-      const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+      // cellDates:true faz o SheetJS entregar células de data como objeto Date real,
+      // em vez de texto formatado no idioma da planilha (era isso que causava datas
+      // tipo "4/28/26" — formato americano — aparecerem trocadas).
+      const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+      const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
       if (!raw.length) { toast('Planilha vazia!', true); return; }
 
       const headers = raw[0].map(h => String(h || '').toLowerCase().trim());
@@ -212,8 +261,9 @@ function onImportExcelFile(e) {
         document.getElementById('import-confirm-btn').disabled = true;
         return;
       }
+      const exemploMontado = cfg.montar(linhas[0], _perfilAtivo());
       prev.innerHTML = '✓ <strong style="color:var(--accent)">' + linhas.length + '</strong> registro(s) prontos para importar.<br>' +
-        'Exemplo (1ª linha): <span style="color:var(--text)">' + esc(JSON.stringify(linhas[0])) + '</span>';
+        'Exemplo (1ª linha): <span style="color:var(--text)">' + esc(JSON.stringify(exemploMontado)) + '</span>';
       document.getElementById('import-confirm-btn').disabled = false;
     } catch (err) {
       console.error(err);
