@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>NFS — Sistema de Gestão de Erros</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
@@ -143,7 +142,7 @@ user-select:none;line-height:1">✦</div>
 50%{opacity:0.4;transform:scale(0.6);}
 }
 </style>
-<div style="text-align:center;">
+<div id="tela-perfil-title" style="text-align:center;">
 <div style="display:inline-block;background:var(--accent);color:#000;font-size:8.5px;
 font-weight:800;letter-spacing:2px;text-transform:uppercase;padding:3px 12px;
 border-radius:20px;margin-bottom:16px">Sistema NFe</div>
@@ -154,7 +153,7 @@ Gestão de <em style="color:var(--accent);font-style:normal">Erros</em>
 Selecione seu perfil para continuar
 </p>
 </div>
-<div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;">
+<div id="tela-perfil-cards" style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;">
 <div id="card-lojas" onclick="selecionarPerfil('Lojas')"
 style="background:var(--card2);border:2px solid #00d4aa30;border-radius:20px;
 padding:40px 52px;text-align:center;cursor:pointer;min-width:180px;
@@ -218,8 +217,6 @@ onkeydown="if(event.key==='Enter')_validarSenhaEdicao()">
 <button class="btn btn-p" style="flex:1" onclick="_validarSenhaEdicao()">Confirmar</button>
 <button class="btn btn-o" style="flex:1" onclick="_fecharModalSenha()">Cancelar</button>
 </div>
-<a href="javascript:void(0)" id="esqueci-senha-link" onclick="enviarSenhaEsquecida()"
-style="display:inline-block;margin-top:14px;font-size:.74rem;color:var(--muted);text-decoration:underline;font-family:'DM Mono',monospace">Esqueci minha senha</a>
 </div>
 </div>
 <script>
@@ -1375,13 +1372,6 @@ Esta é a senha usada para liberar o <strong style="color:var(--accent)">Modo Ed
 (Lojas e Matriz compartilham a mesma senha).
 </p>
 <div class="field" style="margin-bottom:14px">
-<label>E-mail de Recuperação</label>
-<input type="email" id="cfg-email-recup" placeholder="email@exemplo.com">
-<div style="display:flex;justify-content:flex-end;margin-top:8px">
-<button class="btn btn-o btn-sm" onclick="salvarEmailRecuperacao()">💾 Salvar E-mail</button>
-</div>
-</div>
-<div class="field" style="margin-bottom:14px">
 <label>Senha Atual <span class="req">*</span></label>
 <input type="password" id="senha-sis-atual" placeholder="Digite a senha atual" autocomplete="off">
 </div>
@@ -1708,23 +1698,9 @@ border:1px solid #00d4aa30;background:#00d4aa08;color:var(--muted2);line-height:
 <div class="modal-bg" id="modal-import">
 <div class="modal-box" style="max-width:520px">
 <h3 id="import-title">📥 Importar Excel</h3>
-<div class="dnfs-drop" id="import-drop"
-style="padding:24px 20px;display:flex;align-items:center;gap:14px;text-align:left;margin-bottom:4px"
-ondragover="importDragOver(event)"
-ondragleave="importDragLeave(event)"
-ondrop="importDrop(event)">
-<input type="file" id="import-file-input" accept=".xlsx,.xlsm,.xls,.csv" onchange="onImportExcelFile(event)">
-<div style="font-size:1.5rem;flex-shrink:0">📂</div>
-<div>
-<div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:2px" id="import-drop-label">
-Arraste a planilha aqui ou clique para selecionar
-</div>
-<div style="font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted)">
-Suporte: .xlsx · .xlsm · .xls · .csv
-</div>
-</div>
-</div>
-<p id="import-hint" style="font-size:.72rem;color:var(--muted);margin:10px 0 14px;font-family:'DM Mono',monospace;line-height:1.6"></p>
+<input type="file" id="import-file-input" accept=".xlsx,.xls,.csv" onchange="onImportExcelFile(event)"
+style="width:100%;padding:10px;background:var(--inp);border:1px solid var(--inpb);border-radius:var(--r);color:var(--text);font-family:'DM Mono',monospace;font-size:.78rem">
+<p id="import-hint" style="font-size:.72rem;color:var(--muted);margin:8px 0 14px;font-family:'DM Mono',monospace;line-height:1.6"></p>
 <div id="import-preview" style="display:none;background:var(--inp);border:1px solid var(--inpb);border-radius:var(--r);padding:12px 14px;margin-bottom:14px;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted2);word-break:break-word"></div>
 <div id="import-progress-wrap" style="display:none;height:6px;background:var(--inp);border-radius:6px;overflow:hidden;margin-bottom:14px">
 <div id="import-progress-fill" style="height:100%;width:0%;background:var(--accent);transition:width .2s"></div>
@@ -1779,7 +1755,5 @@ onkeydown="if(event.key==='Enter')confirmarLimparBanco()">
 <script src="Perfil_Matriz.js"></script>
 <script src="scripts.js"></script>
 <script src="ImportExcel.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script src="RecuperarSenha.js"></script>
 </body>
 </html>
