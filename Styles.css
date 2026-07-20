@@ -587,3 +587,27 @@ font-family:'DM Mono',monospace;
 margin-top:2px;
 letter-spacing:.3px;
 }
+
+/* ════════════════════════════════ RESPONSIVO — AJUSTES MOBILE ═══ */
+@media(max-width:768px){
+.kpi-grid{grid-template-columns:repeat(2,1fr)}
+.charts-r{grid-template-columns:1fr}
+.modal-box{padding:20px;max-width:calc(100vw - 40px)}
+.modal-btns{flex-wrap:wrap}
+.modal-btns .btn{flex:1;min-width:110px;justify-content:center}
+.ph{gap:8px}
+.ph>div{flex-wrap:wrap}
+.re-header,.checkbox-group,.toggle-grid{flex-wrap:wrap}
+.field input,.field select,.field textarea{font-size:16px}
+}
+@media(max-width:480px){
+.kpi-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+.kpi-card{padding:12px}
+.kpi-num{font-size:1.25rem}
+.ph-left h1{font-size:1.2rem}
+.main{padding:14px 10px 60px}
+.btn{padding:9px 13px;font-size:.75rem}
+.card{padding:16px}
+.modal-box{padding:16px}
+.g2,.g3{gap:10px}
+}
