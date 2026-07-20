@@ -218,6 +218,8 @@ onkeydown="if(event.key==='Enter')_validarSenhaEdicao()">
 <button class="btn btn-p" style="flex:1" onclick="_validarSenhaEdicao()">Confirmar</button>
 <button class="btn btn-o" style="flex:1" onclick="_fecharModalSenha()">Cancelar</button>
 </div>
+<a href="javascript:void(0)" id="esqueci-senha-link" onclick="enviarSenhaEsquecida()"
+style="display:inline-block;margin-top:14px;font-size:.74rem;color:var(--muted);text-decoration:underline;font-family:'DM Mono',monospace">Esqueci minha senha</a>
 </div>
 </div>
 <script>
@@ -1372,6 +1374,13 @@ O e-mail gerado ficará: <strong style="color:var(--accent)">Bom dia,</strong><b
 Esta é a senha usada para liberar o <strong style="color:var(--accent)">Modo Edição</strong> na tela inicial
 (Lojas e Matriz compartilham a mesma senha).
 </p>
+<div class="field" style="margin-bottom:14px">
+<label>E-mail de Recuperação</label>
+<input type="email" id="cfg-email-recup" placeholder="email@exemplo.com">
+<div style="display:flex;justify-content:flex-end;margin-top:8px">
+<button class="btn btn-o btn-sm" onclick="salvarEmailRecuperacao()">💾 Salvar E-mail</button>
+</div>
+</div>
 <div class="field" style="margin-bottom:14px">
 <label>Senha Atual <span class="req">*</span></label>
 <input type="password" id="senha-sis-atual" placeholder="Digite a senha atual" autocomplete="off">
