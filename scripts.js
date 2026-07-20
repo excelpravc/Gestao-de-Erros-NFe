@@ -2387,7 +2387,9 @@ setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; btn.classList.rem
 });
 }
 // ── SALVAR HISTÓRICO ──
+let _salvandoOcorrencia = false;
 async function salvar(){
+if (_salvandoOcorrencia) { return; } // trava contra duplo clique / duplo disparo
 const danf=gv('danf');
 const fornText=selForn.nome||document.getElementById('forn_inp').value.trim();
 const erroCod=selErro.codigo;
@@ -2407,6 +2409,8 @@ toast('Status é obrigatório quando habilitado!',true);
 const elSt=document.getElementById('sel_status');if(elSt)elSt.focus();
 return;
 }
+_salvandoOcorrencia = true;
+try {
 const vencimentoRaw = document.getElementById('reg-vencimento') ? document.getElementById('reg-vencimento').value || '' : '';
 const justSel = document.getElementById('sel_just');
 const justOpt = justSel ? justSel.options[justSel.selectedIndex] : null;
@@ -2416,12 +2420,22 @@ const situacaoVal = isLancada ? 'Lançada' : 'Pendente';
 const horaAgora = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 const btn=document.querySelector('#p-reg .btn-p[onclick="salvar()"]');
 if(btn){btn.textContent='⏳ Salvando…';btn.disabled=true;}
-const errosParaSalvar = [
+const errosParaSalvarBruto = [
 {cod: selErro.codigo, desc: selErro.descricao},
 {cod: selErro2.codigo, desc: selErro2.descricao},
 {cod: selErro3.codigo, desc: selErro3.descricao},
 {cod: selErro4.codigo, desc: selErro4.descricao}
 ].filter(e => e.cod);
+// remove erros repetidos (ex: o mesmo código selecionado sem querer em 2 slots)
+const codsVistos = new Set();
+const errosParaSalvar = errosParaSalvarBruto.filter(e => {
+if (codsVistos.has(e.cod)) return false;
+codsVistos.add(e.cod);
+return true;
+});
+if (errosParaSalvarBruto.length !== errosParaSalvar.length) {
+toast('⚠️ Erro repetido nos slots foi ignorado automaticamente.', true);
+}
 const lojaNome = _perfilAtivo().toLowerCase() === 'matriz' ? 'MATRIZ' : gv('hid_loja_nome');
 const lojaEmail = _perfilAtivo().toLowerCase() === 'matriz' ? '' : gv('hid_loja_email');
 let salvos = 0, errosCount = 0;
@@ -2458,6 +2472,9 @@ if(ind){ind.textContent=`✓ ${salvos} ocorrência(s) registrada(s) com sucesso!
 renderTblHist();gerarDash();resetReg();window.scrollTo({top:0,behavior:'smooth'});
 }
 if(errosCount > 0) { toast(`Falha ao salvar ${errosCount} registro(s).`, true); }
+} finally {
+_salvandoOcorrencia = false;
+}
 }
 function resetReg(){
 selErro.codigo='';selErro.descricao='';
