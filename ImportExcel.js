@@ -132,17 +132,25 @@ const IMPORT_CFG = {
   },
   historico: {
     titulo: 'Importar Histórico',
-    dica: 'Colunas esperadas: DANF/NF, Fornecedor, Código Erro, Descrição Erro, Loja, Comprador, Status, Situação, Vencimento, Data (opcional — se vazio, usa a data de hoje).',
+    dica: 'Colunas esperadas (mesmas da Exportação): ID, Data, DANF, Fornecedor, Cod.Erro, Desc.Erro, Comprador, Email Comprador, Comercial, Email Comercial, Loja, Email Loja, Manifesto, Email Manifesto, Destinatarios PARA, STATUS, ST, Hora, Validade.',
     campos: {
       danf: ['danf', 'nf', 'nota', 'numero', 'número'],
       fornecedor: ['fornecedor'],
-      codErro: ['codigo erro', 'cod erro', 'código erro'],
-      erroDesc: ['descricao erro', 'descrição erro', 'erro'],
+      codErro: ['codigo erro', 'cod erro', 'código erro', 'cod.erro'],
+      erroDesc: ['descricao erro', 'descrição erro', 'erro', 'desc.erro'],
       loja: ['loja'],
+      emailLoja: ['email loja', 'e-mail loja'],
       comprador: ['comprador'],
+      emailComprador: ['email comprador', 'e-mail comprador'],
+      comercial: ['comercial'],
+      emailComercial: ['email comercial', 'e-mail comercial'],
+      manifesto: ['manifesto'],
+      emailManifesto: ['email manifesto', 'e-mail manifesto'],
+      para: ['destinatarios para', 'destinatários para', 'para'],
       status: ['status'],
-      situacao: ['situacao', 'situação'],
-      vencimento: ['vencimento'],
+      situacao: ['situacao', 'situação', 'st'],
+      hora: ['hora'],
+      vencimento: ['vencimento', 'validade'],
       data: ['data', 'data emissão', 'data emissao']
     },
     obrigatorios: ['danf'],
@@ -150,16 +158,24 @@ const IMPORT_CFG = {
     montar: (row, perfil) => {
       const lojaObj = DB.lojas.find(l => l.nome.toLowerCase() === String(row.loja || '').trim().toLowerCase());
       const compObj = DB.compradores.find(c => c.nome.toLowerCase() === String(row.comprador || '').trim().toLowerCase());
+      const comercObj = DB.comerciais.find(c => c.nome.toLowerCase() === String(row.comercial || '').trim().toLowerCase());
+      const manifObj = DB.manifestos.find(m => m.nome.toLowerCase() === String(row.manifesto || '').trim().toLowerCase());
       return {
         danf: String(row.danf || '').trim(),
         fornecedor: (row.fornecedor || '').toString().toUpperCase().trim(),
         codErro: (row.codErro || '').toString().toUpperCase().trim(),
         erroDesc: (row.erroDesc || '').toString().toUpperCase().trim(),
         loja: lojaObj ? lojaObj.nome : (row.loja || '').toString().toUpperCase().trim(),
-        emailLoja: lojaObj ? lojaObj.email : '',
+        emailLoja: lojaObj ? lojaObj.email : (row.emailLoja || '').toString().trim(),
         comprador: compObj ? compObj.nome : (row.comprador || '').toString().trim(),
-        emailComprador: compObj ? compObj.email : '',
+        emailComprador: compObj ? compObj.email : (row.emailComprador || '').toString().trim(),
+        comercial: comercObj ? comercObj.nome : (row.comercial || '').toString().trim(),
+        emailComercial: comercObj ? comercObj.email : (row.emailComercial || '').toString().trim(),
+        manifesto: manifObj ? manifObj.nome : (row.manifesto || '').toString().trim(),
+        emailManifesto: manifObj ? manifObj.email : (row.emailManifesto || '').toString().trim(),
+        para: (row.para || '').toString().trim(),
         status: (row.status || '').toString().trim(),
+        hora: (row.hora || '').toString().trim(),
         situacao: (row.situacao || 'Pendente').toString().trim() || 'Pendente',
         vencimento: _normalizarDataImport(row.vencimento),
         data: _normalizarDataImport(row.data) || _hojeBR(),
@@ -233,8 +249,13 @@ function processarArquivoImport(file) {
 
       const headers = raw[0].map(h => String(h || '').toLowerCase().trim());
       function acharCol(aliases) {
-        for (let i = 0; i < headers.length; i++) {
-          for (const a of aliases) { if (headers[i] === a || headers[i].includes(a)) return i; }
+        // 1ª passada: casamento exato (evita que "ST" pegue a coluna "STATUS" por conter as letras "st")
+        for (const a of aliases) {
+          for (let i = 0; i < headers.length; i++) { if (headers[i] === a) return i; }
+        }
+        // 2ª passada: casamento parcial, só se não achou exato
+        for (const a of aliases) {
+          for (let i = 0; i < headers.length; i++) { if (headers[i].includes(a)) return i; }
         }
         return -1;
       }
@@ -313,6 +334,42 @@ async function confirmarImportExcel() {
 // ════════════════════════════════════════════════════════════════
 function exportarExcel(tipo) {
   if (typeof XLSX === 'undefined') { toast('⚠️ Biblioteca de Excel não carregada.', true); return; }
+
+  // Histórico usa cabeçalhos "amigáveis" — os MESMOS que a Importação de Histórico reconhece,
+  // para que um arquivo exportado possa ser reimportado sem nenhum ajuste manual de colunas.
+  if (tipo === 'historico') {
+    const rows = (DB.historico || []).map(r => ({
+      'ID': r.id || '',
+      'Data': r.data || '',
+      'DANF': r.danf || '',
+      'Fornecedor': r.fornecedor || '',
+      'Cod.Erro': r.codErro || '',
+      'Desc.Erro': r.erroDesc || '',
+      'Comprador': r.comprador || '',
+      'Email Comprador': r.emailComprador || '',
+      'Comercial': r.comercial || '',
+      'Email Comercial': r.emailComercial || '',
+      'Loja': r.loja || '',
+      'Email Loja': r.emailLoja || '',
+      'Manifesto': r.manifesto || '',
+      'Email Manifesto': r.emailManifesto || '',
+      'Destinatarios PARA': r.para || '',
+      'STATUS': r.status || '',
+      'ST': r.situacao || '',
+      'Hora': r.hora || '',
+      'Validade': r.vencimento || ''
+    }));
+    if (!rows.length) { toast('Nada para exportar — a lista está vazia.', true); return; }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    const nomeAba = (_perfilAtivo().toLowerCase() === 'matriz') ? 'Historico_Matriz' : 'Historico_Lojas';
+    XLSX.utils.book_append_sheet(wb, ws, nomeAba.slice(0, 31));
+    const nomeArquivo = nomeAba + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    XLSX.writeFile(wb, nomeArquivo);
+    toast('✓ Exportado: ' + nomeArquivo);
+    return;
+  }
+
   const dbKey = DB_KEY_POR_TIPO[tipo];
   const rows = (DB[dbKey] || []).map(r => {
     const copia = Object.assign({}, r);
