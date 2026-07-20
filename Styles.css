@@ -611,3 +611,17 @@ letter-spacing:.3px;
 .modal-box{padding:16px}
 .g2,.g3{gap:10px}
 }
+
+/* ════════════════════════════════ RESPONSIVO — TELA INICIAL (LOJAS/MATRIZ) ═══ */
+@media(max-width:600px){
+#tela-perfil{gap:26px!important;padding:16px}
+#tela-perfil-title h1{font-size:1.5rem!important}
+#tela-perfil-cards{gap:16px!important}
+#card-lojas,#card-matriz{padding:26px 20px!important;min-width:130px!important;flex:1 1 140px}
+#card-lojas>div:first-child,#card-matriz>div:first-child{font-size:2.6rem!important;margin-bottom:8px!important}
+#card-lojas>div:nth-child(2),#card-matriz>div:nth-child(2){font-size:.95rem!important}
+}
+@media(max-width:360px){
+#tela-perfil-cards{flex-direction:column;align-items:stretch;max-width:220px;margin:0 auto}
+#card-lojas,#card-matriz{min-width:0!important}
+}
