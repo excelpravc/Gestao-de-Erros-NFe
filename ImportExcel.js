@@ -332,41 +332,70 @@ async function confirmarImportExcel() {
 // ════════════════════════════════════════════════════════════════
 //  EXPORTAR EXCEL — baixa a lista atual (DB) como .xlsx
 // ════════════════════════════════════════════════════════════════
-function exportarExcel(tipo) {
+function _linhasExportHistorico(lista) {
+  return (lista || []).map(r => ({
+    'ID': r.id || '',
+    'Data': r.data || '',
+    'DANF': r.danf || '',
+    'Fornecedor': r.fornecedor || '',
+    'Cod.Erro': r.codErro || '',
+    'Desc.Erro': r.erroDesc || '',
+    'Comprador': r.comprador || '',
+    'Email Comprador': r.emailComprador || '',
+    'Comercial': r.comercial || '',
+    'Email Comercial': r.emailComercial || '',
+    'Loja': r.loja || '',
+    'Email Loja': r.emailLoja || '',
+    'Manifesto': r.manifesto || '',
+    'Email Manifesto': r.emailManifesto || '',
+    'Destinatarios PARA': r.para || '',
+    'STATUS': r.status || '',
+    'ST': r.situacao || '',
+    'Hora': r.hora || '',
+    'Validade': r.vencimento || ''
+  }));
+}
+
+function _baixarXlsxHistorico(rows, nomeAba) {
+  if (!rows.length) { toast('Nada para exportar — nenhum registro no período selecionado.', true); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, nomeAba.slice(0, 31));
+  const nomeArquivo = nomeAba + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+  XLSX.writeFile(wb, nomeArquivo);
+  toast('✓ Exportado: ' + nomeArquivo);
+}
+
+async function exportarExcel(tipo) {
   if (typeof XLSX === 'undefined') { toast('⚠️ Biblioteca de Excel não carregada.', true); return; }
 
   // Histórico usa cabeçalhos "amigáveis" — os MESMOS que a Importação de Histórico reconhece,
   // para que um arquivo exportado possa ser reimportado sem nenhum ajuste manual de colunas.
+  //
+  // Em vez de usar DB.historico (que pode ter sido sobrescrito pelo Dashboard NFS, cujo
+  // gerarDash() roda logo após buscarHistPeriodo() e recarrega DB.historico com o período do
+  // Dashboard — normalmente só o dia atual), buscamos direto no banco usando o período
+  // selecionado NA PRÓPRIA aba Histórico (hist-de / hist-ate). Isso garante que a exportação
+  // sempre reflete o período que você está vendo/pesquisando ali, não o do Dashboard.
   if (tipo === 'historico') {
-    const rows = (DB.historico || []).map(r => ({
-      'ID': r.id || '',
-      'Data': r.data || '',
-      'DANF': r.danf || '',
-      'Fornecedor': r.fornecedor || '',
-      'Cod.Erro': r.codErro || '',
-      'Desc.Erro': r.erroDesc || '',
-      'Comprador': r.comprador || '',
-      'Email Comprador': r.emailComprador || '',
-      'Comercial': r.comercial || '',
-      'Email Comercial': r.emailComercial || '',
-      'Loja': r.loja || '',
-      'Email Loja': r.emailLoja || '',
-      'Manifesto': r.manifesto || '',
-      'Email Manifesto': r.emailManifesto || '',
-      'Destinatarios PARA': r.para || '',
-      'STATUS': r.status || '',
-      'ST': r.situacao || '',
-      'Hora': r.hora || '',
-      'Validade': r.vencimento || ''
-    }));
-    if (!rows.length) { toast('Nada para exportar — a lista está vazia.', true); return; }
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
+    const deEl = document.getElementById('hist-de');
+    const ateEl = document.getElementById('hist-ate');
+    const de = deEl ? deEl.value : '';
+    const ate = ateEl ? ateEl.value : '';
+    if (!de || !ate) { toast('Selecione o período na aba Histórico antes de exportar!', true); return; }
+
     const nomeAba = (_perfilAtivo().toLowerCase() === 'matriz') ? 'Historico_Matriz' : 'Historico_Lojas';
-    XLSX.utils.book_append_sheet(wb, ws, nomeAba.slice(0, 31));
-    const nomeArquivo = nomeAba + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
-    XLSX.writeFile(wb, nomeArquivo);
-    toast('✓ Exportado: ' + nomeArquivo);
+    try {
+      toast('⏳ Buscando período para exportar...');
+      const lista = await new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
+          .loadHistFiltrado(de, ate, _perfilAtivo());
+      });
+      _baixarXlsxHistorico(_linhasExportHistorico(lista), nomeAba);
+    } catch (e) {
+      console.error('Erro ao exportar histórico:', e);
+      toast('Erro ao buscar dados para exportar: ' + (e && e.message ? e.message : e), true);
+    }
     return;
   }
 
