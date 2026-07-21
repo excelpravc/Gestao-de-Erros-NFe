@@ -447,11 +447,17 @@ async function exportarExcel(tipo) {
 // ════════════════════════════════════════════════════════════════
 function _colecaoFirestore(tipo) {
   const map = {
-    codErro: 'codErros', fornecedor: 'fornecedores', comprador: 'compradores',
+    fornecedor: 'fornecedores',
     comercial: 'comerciais', loja: 'lojas', manifesto: 'manifestos', justificativa: 'justificativas'
   };
   if (tipo === 'historico') {
     return (_perfilAtivo().toLowerCase() === 'matriz') ? 'Historico_Matriz' : 'Historico_Lojas';
+  }
+  if (tipo === 'comprador') {
+    return (_perfilAtivo().toLowerCase() === 'matriz') ? 'Compradores_Matriz' : 'Compradores_Lojas';
+  }
+  if (tipo === 'codErro') {
+    return (_perfilAtivo().toLowerCase() === 'matriz') ? 'Cod_Erros_Matriz' : 'Cod_Erros_Lojas';
   }
   return map[tipo];
 }
