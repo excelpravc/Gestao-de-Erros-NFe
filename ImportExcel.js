@@ -53,6 +53,32 @@ function _normalizarDataImport(v) {
   return s;
 }
 
+function _normalizarHoraImport(v) {
+  if (v === undefined || v === null || v === '') return '';
+
+  // Veio como objeto Date (Excel guarda campo "só hora" como data-base 30/12/1899 + horário)
+  if (v instanceof Date && !isNaN(v)) {
+    return String(v.getHours()).padStart(2, '0') + ':' + String(v.getMinutes()).padStart(2, '0');
+  }
+
+  // Veio como número serial do Excel (fração do dia — ex: 0.34444 = 08:16)
+  if (typeof v === 'number' && v >= 0 && v < 1) {
+    const totalMin = Math.round(v * 24 * 60);
+    const hh = Math.floor(totalMin / 60) % 24;
+    const mm = totalMin % 60;
+    return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  }
+
+  const s = String(v).trim();
+  if (!s) return '';
+
+  // já veio como texto "HH:MM" ou "HH:MM:SS"
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (m) return String(Number(m[1])).padStart(2, '0') + ':' + m[2];
+
+  return s;
+}
+
 const DB_KEY_POR_TIPO = {
   codErro: 'codErros', fornecedor: 'fornecedores', comprador: 'compradores',
   comercial: 'comerciais', loja: 'lojas', manifesto: 'manifestos',
@@ -175,7 +201,7 @@ const IMPORT_CFG = {
         emailManifesto: manifObj ? manifObj.email : (row.emailManifesto || '').toString().trim(),
         para: (row.para || '').toString().trim(),
         status: (row.status || '').toString().trim(),
-        hora: (row.hora || '').toString().trim(),
+        hora: _normalizarHoraImport(row.hora),
         situacao: (row.situacao || 'Pendente').toString().trim() || 'Pendente',
         vencimento: _normalizarDataImport(row.vencimento),
         data: _normalizarDataImport(row.data) || _hojeBR(),
