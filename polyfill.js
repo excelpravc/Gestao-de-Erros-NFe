@@ -30,6 +30,12 @@
   function _histColl(perfil) {
     return (String(perfil || '').toLowerCase() === 'matriz') ? 'Historico_Matriz' : 'Historico_Lojas';
   }
+  function _compradoresColl(perfil) {
+    return (String(perfil || '').toLowerCase() === 'matriz') ? 'Compradores_Matriz' : 'Compradores_Lojas';
+  }
+  function _codErrosColl(perfil) {
+    return (String(perfil || '').toLowerCase() === 'matriz') ? 'Cod_Erros_Matriz' : 'Cod_Erros_Lojas';
+  }
 
   // ── Gera próximo ID numérico (equivalente ao auto-incremento das planilhas) ──
   async function _nextId(collName) {
@@ -240,11 +246,11 @@
   async function loadAll(perfil) {
     const [compradores, comerciais, lojas, manifestos, codErros, fornecedores, historico, regras, justificativas, gruposLoja] =
       await Promise.all([
-        _loadColl(COLLECTIONS.comprador),
+        _loadColl(_compradoresColl(perfil)),
         _loadColl(COLLECTIONS.comercial),
         _loadColl(COLLECTIONS.loja),
         _loadColl(COLLECTIONS.manifesto),
-        _loadColl(COLLECTIONS.codErro),
+        _loadColl(_codErrosColl(perfil)),
         _loadColl(COLLECTIONS.fornecedor),
         _loadColl(_histColl(perfil)),
         _loadColl(COLLECTIONS.regra),
@@ -260,9 +266,9 @@
     loadHistFiltrado,
     addHistorico, updateHistorico, deleteHistorico, updateHistoricoSituacaoPorDANF,
     loadAssinatura, saveAssinatura,
-    addComprador: (d) => _add(COLLECTIONS.comprador, d),
-    updateComprador: (d) => _update(COLLECTIONS.comprador, d),
-    deleteComprador: (id) => _delete(COLLECTIONS.comprador, id),
+    addComprador: (d) => _add(_compradoresColl(d && d.perfil), d),
+    updateComprador: (d) => _update(_compradoresColl(d && d.perfil), d),
+    deleteComprador: (id, perfil) => _delete(_compradoresColl(perfil), id),
     addComercial: (d) => _add(COLLECTIONS.comercial, d),
     updateComercial: (d) => _update(COLLECTIONS.comercial, d),
     deleteComercial: (id) => _delete(COLLECTIONS.comercial, id),
@@ -272,9 +278,9 @@
     addManifesto: (d) => _add(COLLECTIONS.manifesto, d),
     updateManifesto: (d) => _update(COLLECTIONS.manifesto, d),
     deleteManifesto: (id) => _delete(COLLECTIONS.manifesto, id),
-    addCodErro: (d) => _add(COLLECTIONS.codErro, d),
-    updateCodErro: (d) => _update(COLLECTIONS.codErro, d),
-    deleteCodErro: (id) => _delete(COLLECTIONS.codErro, id),
+    addCodErro: (d) => _add(_codErrosColl(d && d.perfil), d),
+    updateCodErro: (d) => _update(_codErrosColl(d && d.perfil), d),
+    deleteCodErro: (id, perfil) => _delete(_codErrosColl(perfil), id),
     addFornecedor: (d) => _add(COLLECTIONS.fornecedor, d),
     updateFornecedor: (d) => _update(COLLECTIONS.fornecedor, d),
     deleteFornecedor: (id) => _delete(COLLECTIONS.fornecedor, id),
