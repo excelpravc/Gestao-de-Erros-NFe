@@ -31,9 +31,96 @@ color: #ffe0e0 !important;
 </style>
 </head>
 <body>
+<!-- ════════════ TELA DE LOGIN ════════════ -->
+<div id="tela-login" style="
+position:fixed;inset:0;display:flex;flex-direction:column;
+align-items:center;justify-content:center;gap:28px;z-index:10000;
+background-color:#080a0e;
+background-image:
+linear-gradient(135deg, #0a0a0a 0%, #111318 40%, #0d0f14 60%, #050507 100%);
+overflow:hidden;">
+<div id="tela-login-title" style="text-align:center;">
+<div style="display:inline-block;background:var(--accent);color:#000;font-size:8.5px;
+font-weight:800;letter-spacing:2px;text-transform:uppercase;padding:3px 12px;
+border-radius:20px;margin-bottom:16px">Sistema NFe</div>
+<h1 style="font-size:2rem;font-weight:800;letter-spacing:-.5px;line-height:1.2;margin-bottom:8px">
+Gestão de <em style="color:var(--accent);font-style:normal">Erros</em>
+</h1>
+<p style="color:var(--muted);font-size:.82rem;font-family:'DM Mono',monospace">
+Entre com seu usuário para continuar
+</p>
+</div>
+<div style="background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:340px">
+<label style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase">Usuário</label>
+<input type="text" id="login-usuario-inp" placeholder="seu usuário" autocomplete="username"
+style="width:100%;margin-top:6px;margin-bottom:16px" onkeydown="if(event.key==='Enter')document.getElementById('login-senha-inp').focus()">
+<label style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase">Senha</label>
+<input type="password" id="login-senha-inp" placeholder="sua senha" autocomplete="current-password"
+style="width:100%;margin-top:6px" onkeydown="if(event.key==='Enter')fazerLogin()">
+<p id="login-erro" style="display:none;color:var(--danger);font-size:.74rem;font-family:'DM Mono',monospace;margin-top:10px">✕ Usuário ou senha incorretos</p>
+<button class="btn btn-p btn-full" id="login-btn" style="margin-top:20px" onclick="fazerLogin()">Entrar</button>
+</div>
+<p style="color:var(--muted);font-family:'DM Mono',monospace;font-size:.68rem;opacity:.4">
+Versão 1.18 · Sistema de Gestão de Erros NFe
+</p>
+</div>
+
+<!-- ════════════ TELA ADM: GERENCIAR USUÁRIOS ════════════ -->
+<div id="tela-admin" style="position:fixed;inset:0;display:none;flex-direction:column;
+z-index:10000;background:#080a0e;overflow-y:auto;padding:32px 24px">
+<div style="max-width:900px;margin:0 auto;width:100%">
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:24px">
+<div>
+<h1 style="font-size:1.5rem;font-weight:800">👑 <em style="color:var(--accent);font-style:normal">Painel Admin</em> — Usuários</h1>
+<p style="color:var(--muted);font-size:.82rem;font-family:'DM Mono',monospace">Gerencie os clientes com acesso ao sistema</p>
+</div>
+<div style="display:flex;gap:8px">
+<button class="btn btn-p" onclick="abrirFormUsuario()">➕ Novo Usuário</button>
+<button class="btn btn-o" onclick="logoutAdmin()">Sair</button>
+</div>
+</div>
+<div class="card">
+<div id="admin-usuarios-lista">Carregando…</div>
+</div>
+</div>
+</div>
+
+<!-- ════════════ MODAL: INCLUIR/EDITAR USUÁRIO (ADM) ════════════ -->
+<div class="modal-bg" id="modal-usuario" style="z-index:10800">
+<div class="modal-box" style="max-width:520px;text-align:left;max-height:88vh;overflow-y:auto">
+<h3 id="modal-usuario-titulo">➕ Novo Usuário</h3>
+<input type="hidden" id="usu-doc-id">
+<div class="field"><label>Usuário (login)</label><input type="text" id="usu-usuario" placeholder="ex: clienteA"></div>
+<div class="field"><label>Senha</label><input type="text" id="usu-senha" placeholder="senha de acesso"></div>
+<div class="field"><label>Nome da Empresa</label><input type="text" id="usu-empresa" placeholder="Empresa do cliente"></div>
+<div class="field"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="usu-ativo" checked style="width:auto">Usuário ativo</label></div>
+<div class="field" id="usu-senha-sistema-wrap" style="display:none">
+<label>Senha do Sistema (Modo Edição dentro do app do cliente)</label>
+<input type="text" id="usu-senha-sistema" placeholder="carregando…">
+<p style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:4px">
+Essa é a senha que o cliente usa para liberar Edição (Lojas/Matriz) dentro do sistema dele. É carregada automaticamente do banco dele — altere aqui pra trocar direto.
+</p>
+</div>
+<div class="sec-title" style="margin-top:18px">Configuração do Firebase do cliente</div>
+<p style="font-size:.72rem;color:var(--muted);margin-bottom:12px;font-family:'DM Mono',monospace;line-height:1.6">
+Cole aqui os dados do projeto Firebase criado pra esse cliente (Configurações do projeto → Seus apps → SDK Config).
+</p>
+<div class="field"><label>apiKey</label><input type="text" id="usu-apiKey"></div>
+<div class="field"><label>authDomain</label><input type="text" id="usu-authDomain"></div>
+<div class="field"><label>projectId</label><input type="text" id="usu-projectId"></div>
+<div class="field"><label>storageBucket</label><input type="text" id="usu-storageBucket"></div>
+<div class="field"><label>messagingSenderId</label><input type="text" id="usu-messagingSenderId"></div>
+<div class="field"><label>appId</label><input type="text" id="usu-appId"></div>
+<div class="modal-btns">
+<button class="btn btn-p" onclick="salvarUsuario()">💾 Salvar</button>
+<button class="btn btn-o" onclick="fecharFormUsuario()">Cancelar</button>
+</div>
+</div>
+</div>
+
 <!-- ════════════ TELA DE SELEÇÃO DE PERFIL ════════════ -->
 <div id="tela-perfil" style="
-position:fixed;inset:0;display:flex;flex-direction:column;
+position:fixed;inset:0;display:none;flex-direction:column;
 align-items:center;justify-content:center;gap:40px;z-index:10000;
 background-color:#080a0e;
 background-image:
@@ -231,12 +318,9 @@ const _PERFIS_CFG = {
 'Matriz': { nome:'Matriz', emoji:'', cor:'#4d9fff', histSheet:'Historico_Matriz' },
 };
 // ── SENHA ÚNICA DE EDIÇÃO (mesma para Lojas e Matriz) ──
-// Valor inicial — será sobrescrito pela senha salva no servidor assim que carregar
+// Valor inicial — será sobrescrito pela senha salva no servidor DEPOIS do login
+// (ver _carregarSenhaSistemaInicial() em MultiTenant.js)
 let SENHA_EDICAO = '@MANIFESTO';
-google.script.run
-.withSuccessHandler(function(v){ if (v) SENHA_EDICAO = v; })
-.withFailureHandler(function(){})
-.loadSenhaSistema();
 window._MODO_VISUALIZACAO = false;
 let _perfilPendente = '';
 function selecionarPerfil(nome) {
@@ -344,12 +428,10 @@ if (typeof hide === 'function') hide('loading');
 })
 .loadAll(p.nome);
 }
-// Na primeira carga: mostra tela de seleção, esconde loading
-// O sistema SÓ carrega após o usuário clicar em um perfil
+// Na primeira carga: mostra tela de LOGIN, esconde loading
+// A tela de perfil (Lojas/Matriz) só aparece depois do login (ver MultiTenant.js)
 document.addEventListener('DOMContentLoaded', function() {
-const tela = document.getElementById('tela-perfil');
 const load = document.getElementById('loading');
-if (tela) tela.style.display = 'flex';
 if (load) load.style.display = 'none';
 // _PERFIL começa vazio — será definido em selecionarPerfil()
 window._PERFIL = null;
@@ -1781,5 +1863,6 @@ onkeydown="if(event.key==='Enter')confirmarLimparBanco()">
 <script src="ImportExcel.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="RecuperarSenha.js"></script>
+<script src="MultiTenant.js"></script>
 </body>
 </html>
