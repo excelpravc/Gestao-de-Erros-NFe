@@ -54,6 +54,13 @@ Entre com seu usuário para continuar
 <label style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase">Usuário</label>
 <input type="text" id="login-usuario-inp" placeholder="seu usuário" autocomplete="username"
 style="width:100%;margin-top:6px;margin-bottom:16px" onkeydown="if(event.key==='Enter')document.getElementById('login-senha-inp').focus()">
+<div id="login-modo-wrap" style="margin-bottom:16px">
+<label style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase">Como deseja acessar?</label>
+<div style="display:flex;gap:10px;margin-top:6px">
+<button type="button" id="login-modo-view" class="btn btn-p" style="flex:1;padding:10px" onclick="_selecionarModoLogin('view')">👁 Visualizar</button>
+<button type="button" id="login-modo-edit" class="btn btn-o" style="flex:1;padding:10px" onclick="_selecionarModoLogin('edit')">✏ Editar</button>
+</div>
+</div>
 <label style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase">Senha</label>
 <input type="password" id="login-senha-inp" placeholder="sua senha" autocomplete="current-password"
 style="width:100%;margin-top:6px" onkeydown="if(event.key==='Enter')fazerLogin()">
@@ -91,7 +98,7 @@ z-index:10000;background:#080a0e;overflow-y:auto;padding:32px 24px">
 <h3 id="modal-usuario-titulo">➕ Novo Usuário</h3>
 <input type="hidden" id="usu-doc-id">
 <div class="field"><label>Usuário (login)</label><input type="text" id="usu-usuario" placeholder="ex: clienteA"></div>
-<div class="field"><label>Senha</label><input type="text" id="usu-senha" placeholder="senha de acesso"></div>
+<div class="field"><label>Senha de Visualização (usada no login, modo Visualizar)</label><input type="text" id="usu-senha" placeholder="senha de acesso"></div>
 <div class="field"><label>Nome da Empresa</label><input type="text" id="usu-empresa" placeholder="Empresa do cliente"></div>
 <div class="field"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="usu-ativo" checked style="width:auto">Usuário ativo</label></div>
 <div class="field" id="usu-senha-sistema-wrap" style="display:none">
@@ -324,12 +331,14 @@ let SENHA_EDICAO = '@MANIFESTO';
 window._MODO_VISUALIZACAO = false;
 let _perfilPendente = '';
 function selecionarPerfil(nome) {
-_perfilPendente = nome;
-const cfg = _PERFIS_CFG[nome] || _PERFIS_CFG['Lojas'];
-const lbl = document.getElementById('modal-modo-perfil');
-if (lbl) lbl.textContent = 'Perfil selecionado: ' + cfg.emoji + ' ' + cfg.nome;
-document.getElementById('modal-modo').style.display = 'flex';
+// Modo (Visualizar/Editar) e senha já foram validados na tela de login —
+// aqui só resta aplicar o perfil (Lojas/Matriz) e entrar direto no sistema.
+_prosseguirComPerfil(nome);
 }
+// As funções abaixo (modal "Como deseja acessar?" e modal de Senha de
+// Edição) ficaram sem uso no fluxo normal — a escolha do modo e a senha
+// agora acontecem na tela de login. Mantidas apenas por segurança, caso
+// algum código antigo ainda referencie essas funções.
 function _fecharModalModo() {
 document.getElementById('modal-modo').style.display = 'none';
 _perfilPendente = '';
