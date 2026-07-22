@@ -35,10 +35,15 @@ function _selecionarModoLogin(modo) {
   window._LOGIN_MODO_ESCOLHIDO = modo;
   const btnView = document.getElementById('login-modo-view');
   const btnEdit = document.getElementById('login-modo-edit');
+  const ativo = 'background:var(--accent);border:1px solid var(--accent);color:#000';
+  const inativo = 'background:transparent;border:1px solid var(--accent);color:var(--accent)';
+  const base = 'flex:1;padding:10px;';
   if (modo === 'view') {
-    btnView.className = 'btn btn-p'; btnEdit.className = 'btn btn-o';
+    btnView.style.cssText = base + ativo;
+    btnEdit.style.cssText = base + inativo;
   } else {
-    btnView.className = 'btn btn-o'; btnEdit.className = 'btn btn-p';
+    btnView.style.cssText = base + inativo;
+    btnEdit.style.cssText = base + ativo;
   }
 }
 
