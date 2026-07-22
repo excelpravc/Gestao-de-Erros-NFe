@@ -515,7 +515,9 @@ pointer-events:none!important;
 cursor:not-allowed!important;
 filter:grayscale(.4);
 }
-body.modo-visualizacao .btn-ghost[onclick*="resetReg"] {
+body.modo-visualizacao .btn-ghost[onclick*="resetReg"],
+body.modo-visualizacao .btn-ghost[onclick*="_fecharModalModo"],
+body.modo-visualizacao .btn-ghost[onclick*="_fecharModalSenha"] {
 opacity:1!important;
 pointer-events:auto!important;
 cursor:pointer!important;
