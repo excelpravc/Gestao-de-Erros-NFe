@@ -10,8 +10,8 @@
   window.google.script = window.google.script || {};
 
   function getDb() {
-    if (!window.db) throw new Error('Firestore não inicializado (firebase-init.js não carregou antes do polyfill.js)');
-    return window.db;
+    if (!window.dbTenant) throw new Error('Nenhum cliente logado ainda — faça login antes de usar o sistema.');
+    return window.dbTenant;
   }
 
   // ── Coleções simples (mesma lista para os dois perfis) ──
@@ -153,6 +153,14 @@
     const senhaSalva = snap.exists ? (snap.data().senha || '@MANIFESTO') : '@MANIFESTO';
     if (String(atual) !== String(senhaSalva)) return { ok: false, msg: 'Senha atual incorreta!' };
     await ref.set({ senha: nova }, { merge: true });
+    // Espelha a senha atualizada no diretório central, pra o ADM sempre
+    // ver a senha em dia sem precisar entrar no banco de cada cliente.
+    if (window.dbCentral && window.CURRENT_USUARIO_ID) {
+      try {
+        await window.dbCentral.collection('usuarios').doc(window.CURRENT_USUARIO_ID)
+          .update({ senhaSistemaAtual: nova, senhaSistemaAtualizadaEm: new Date().toISOString() });
+      } catch (e) { console.error('[Polyfill] Falha ao espelhar senha para o diretório central:', e); }
+    }
     return { ok: true };
   }
 
