@@ -29,10 +29,31 @@
 // ════════════════════════════════════════════════════════════════
 
 let _usuarioLogadoDoc = null;
+window._LOGIN_MODO_ESCOLHIDO = 'view'; // padrão inicial da tela de login
+
+function _selecionarModoLogin(modo) {
+  window._LOGIN_MODO_ESCOLHIDO = modo;
+  const btnView = document.getElementById('login-modo-view');
+  const btnEdit = document.getElementById('login-modo-edit');
+  if (modo === 'view') {
+    btnView.className = 'btn btn-p'; btnEdit.className = 'btn btn-o';
+  } else {
+    btnView.className = 'btn btn-o'; btnEdit.className = 'btn btn-p';
+  }
+}
+
+// Lê a senha de edição atual direto do banco do cliente já conectado
+// (window.dbTenant). Usada só durante o login, antes do resto do
+// sistema (polyfill/scripts) estar totalmente de pé.
+async function _lerSenhaEdicaoTenantAtual() {
+  const snap = await window.dbTenant.collection('config').doc('sistema').get();
+  return snap.exists ? (snap.data().senha || '@MANIFESTO') : '@MANIFESTO';
+}
 
 async function fazerLogin() {
   const usuario = (document.getElementById('login-usuario-inp').value || '').trim().toLowerCase();
   const senha = document.getElementById('login-senha-inp').value || '';
+  const modo = window._LOGIN_MODO_ESCOLHIDO || 'view';
   const erroEl = document.getElementById('login-erro');
   const btn = document.getElementById('login-btn');
   erroEl.style.display = 'none';
@@ -50,38 +71,50 @@ async function fazerLogin() {
 
     const doc = snap.docs[0];
     const dados = doc.data();
-    if (String(dados.senha) !== String(senha)) throw new Error('senha incorreta');
 
-    if (dados.ativo === false) {
-      erroEl.textContent = '✕ Este usuário está desativado. Fale com o administrador.';
-      erroEl.style.display = 'block';
-      return;
-    }
-
-    _usuarioLogadoDoc = Object.assign({ id: doc.id }, dados);
-
-    // ── Login como ADMIN → abre o painel de gestão de usuários ──
+    // ── Login como ADMIN → ignora Visualizar/Editar, abre o painel ──
     if (dados.isAdmin) {
+      if (String(dados.senha) !== String(senha)) throw new Error('senha incorreta');
+      _usuarioLogadoDoc = Object.assign({ id: doc.id }, dados);
       document.getElementById('tela-login').style.display = 'none';
       abrirPainelAdmin();
       return;
     }
 
-    // ── Login como CLIENTE normal → conecta no banco próprio dele ──
+    // ── Login como CLIENTE normal ──
+    if (dados.ativo === false) {
+      erroEl.textContent = '✕ Este usuário está desativado. Fale com o administrador.';
+      erroEl.style.display = 'block';
+      return;
+    }
     if (!dados.firebaseConfig || !dados.firebaseConfig.projectId) {
       erroEl.textContent = '✕ Este usuário ainda não tem um banco configurado. Fale com o administrador.';
       erroEl.style.display = 'block';
       return;
     }
 
+    // Conecta no banco do cliente ANTES de checar a senha de edição,
+    // já que ela mora dentro do banco dele (não no diretório central).
     window.CURRENT_USUARIO_ID = doc.id;
     _initTenantFirebase(dados.firebaseConfig);
+
+    if (modo === 'edit') {
+      const senhaEdicaoReal = await _lerSenhaEdicaoTenantAtual();
+      if (String(senha) !== String(senhaEdicaoReal)) throw new Error('senha incorreta');
+      window._MODO_VISUALIZACAO = false;
+      SENHA_EDICAO = senhaEdicaoReal;
+    } else {
+      // Visualizar: a senha é conferida contra a "Senha de Visualização"
+      // cadastrada pelo admin no diretório central.
+      if (String(dados.senha) !== String(senha)) throw new Error('senha incorreta');
+      window._MODO_VISUALIZACAO = true;
+    }
+
+    _usuarioLogadoDoc = Object.assign({ id: doc.id }, dados);
 
     document.getElementById('tela-login').style.display = 'none';
     const tela = document.getElementById('tela-perfil');
     if (tela) tela.style.display = 'flex';
-
-    _carregarSenhaSistemaInicial();
   } catch (e) {
     console.error('Erro no login:', e);
     erroEl.textContent = '✕ Usuário ou senha incorretos';
@@ -89,15 +122,6 @@ async function fazerLogin() {
   } finally {
     btn.disabled = false; btn.textContent = 'Entrar';
   }
-}
-
-// Carrega a senha de edição do cliente logado — precisa acontecer só
-// DEPOIS que o banco do tenant já está conectado (senão dá erro).
-function _carregarSenhaSistemaInicial() {
-  google.script.run
-    .withSuccessHandler(function (v) { if (v) SENHA_EDICAO = v; })
-    .withFailureHandler(function () {})
-    .loadSenhaSistema();
 }
 
 function logoutAdmin() {
@@ -131,7 +155,7 @@ async function _renderListaUsuarios() {
     box.innerHTML = usuarios.map(u => {
       const detalhes = u.isAdmin
         ? `usuário: ${esc(u.usuario)}`
-        : `usuário: ${esc(u.usuario)} · senha de login: <span class="senha-oculta" data-valor="${esc(u.senha || '')}">••••••</span>` +
+        : `usuário: ${esc(u.usuario)} · senha de visualização: <span class="senha-oculta" data-valor="${esc(u.senha || '')}">••••••</span>` +
           (u.senhaSistemaAtual ? ` · senha do sistema (edição): <span class="senha-oculta" data-valor="${esc(u.senhaSistemaAtual)}">••••••</span>` : '') +
           (u.firebaseConfig && u.firebaseConfig.projectId ? ' · projeto: ' + esc(u.firebaseConfig.projectId) : '');
       return `
