@@ -1129,7 +1129,7 @@ if (id === 'p-dashnfs' && DNFS.activeSheet && DNFS.sheets[DNFS.activeSheet]) {
 setTimeout(function() { dnfsRenderKPIs(); dnfsRenderCharts(); }, 80);
 }
 }
-document.addEventListener('_sistemaCarregado', function() {
+document.addEventListener('_SistemaCarregado', function() {
 document.querySelectorAll('.sb .tab').forEach(btn=>{
 btn.style.userSelect='none';btn.style.webkitUserSelect='none';
 btn.ondragstart=()=>false;
@@ -1194,7 +1194,7 @@ SENHA_EDICAO = nova;
 ['senha-sis-atual','senha-sis-nova','senha-sis-confirma'].forEach(id=>{
 const el=document.getElementById(id); if(el) el.value='';
 });
-toast('✓ Senha do sistema alterada com sucesso!');
+toast('✓ Senha do Sistema alterada com sucesso!');
 const ind=document.getElementById('senha-sis-saved-ind');
 if(ind){ ind.textContent='✓ Nova senha salva'; ind.classList.add('show'); setTimeout(()=>ind.classList.remove('show'),3000); }
 } else {
@@ -3448,7 +3448,7 @@ function hide(id){document.getElementById(id).style.display='none';}
 // ════════════════════════════════════════════════════════════════
 //  DASHBOARD NFS
 // ════════════════════════════════════════════════════════════════
-document.addEventListener('_sistemaCarregado', function() {
+document.addEventListener('_SistemaCarregado', function() {
 var el = document.getElementById('dashnfs-saud');
 if (el && typeof getSaud === 'function') { var s = getSaud(); el.textContent = s.e + ' ' + s.l + '!'; }
 if (typeof dnfsCfgLoad === 'function') dnfsCfgLoad();
