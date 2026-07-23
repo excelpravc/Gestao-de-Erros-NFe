@@ -397,3 +397,38 @@ async function excluirUsuario(id, nomeExibicao) {
     toast('Erro ao excluir: ' + e.message, true);
   }
 }
+// ── Cliente troca a própria Senha de Visualização (gravada no diretório central) ──
+async function alterarSenhaVisualizacao() {
+  const atual = (document.getElementById('senha-view-atual')?.value || '').trim();
+  const nova = (document.getElementById('senha-view-nova')?.value || '').trim();
+  const confirma = (document.getElementById('senha-view-confirma')?.value || '').trim();
+  if (!atual) { toast('Informe a senha atual!', true); return; }
+  if (!nova) { toast('Informe a nova senha!', true); return; }
+  if (nova.length < 4) { toast('A nova senha deve ter pelo menos 4 caracteres!', true); return; }
+  if (nova !== confirma) { toast('A confirmação não coincide com a nova senha!', true); return; }
+  if (!window.CURRENT_USUARIO_ID) { toast('Não foi possível identificar o usuário logado.', true); return; }
+
+  const btn = document.querySelector('button[onclick="alterarSenhaVisualizacao()"]');
+  if (btn) { btn.textContent = '⏳ Salvando…'; btn.disabled = true; }
+  try {
+    const ref = window.dbCentral.collection('usuarios').doc(window.CURRENT_USUARIO_ID);
+    const snap = await ref.get();
+    const senhaSalva = snap.exists ? (snap.data().senha || '') : '';
+    if (String(atual) !== String(senhaSalva)) {
+      toast('Senha atual incorreta!', true);
+      return;
+    }
+    await ref.update({ senha: nova });
+    ['senha-view-atual', 'senha-view-nova', 'senha-view-confirma'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    toast('✓ Senha de visualização alterada com sucesso!');
+    const ind = document.getElementById('senha-view-saved-ind');
+    if (ind) { ind.textContent = '✓ Nova senha salva'; ind.classList.add('show'); setTimeout(() => ind.classList.remove('show'), 3000); }
+  } catch (e) {
+    console.error(e);
+    toast('Falha: ' + e.message, true);
+  } finally {
+    if (btn) { btn.textContent = '💾 Alterar Senha de Visualização'; btn.disabled = false; }
+  }
+}
