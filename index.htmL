@@ -1486,10 +1486,34 @@ O e-mail gerado ficará: <strong style="color:var(--accent)">Bom dia,</strong><b
 <button class="btn btn-p btn-full" style="margin-top:16px" onclick="saveConfig()">💾 Salvar Configurações</button>
 </div>
 <div class="card">
-<div class="sec-title">🔒 Senha do Sistema</div>
+<div class="sec-title">👁 Senha de Visualização</div>
 <p style="font-size:.76rem;color:var(--muted);margin-bottom:16px;font-family:'DM Mono',monospace;line-height:1.6">
-Esta é a senha usada para liberar o <strong style="color:var(--accent)">Modo Edição</strong> na tela inicial
-(Lojas e Matriz compartilham a mesma senha).
+Esta é a senha usada no <strong style="color:var(--accent)">login</strong>, quando alguém entra escolhendo "Visualizar"
+(acesso somente leitura, sem poder editar nada).
+</p>
+<div class="field" style="margin-bottom:14px">
+<label>Senha Atual <span class="req">*</span></label>
+<input type="password" id="senha-view-atual" placeholder="Digite a senha atual" autocomplete="off">
+</div>
+<div class="g2">
+<div class="field">
+<label>Nova Senha <span class="req">*</span></label>
+<input type="password" id="senha-view-nova" placeholder="Digite a nova senha" autocomplete="off">
+</div>
+<div class="field">
+<label>Confirmar Nova Senha <span class="req">*</span></label>
+<input type="password" id="senha-view-confirma" placeholder="Repita a nova senha" autocomplete="off"
+onkeydown="if(event.key==='Enter')alterarSenhaVisualizacao()">
+</div>
+</div>
+<button class="btn btn-p" style="margin-top:14px" onclick="alterarSenhaVisualizacao()">💾 Alterar Senha de Visualização</button>
+<div id="senha-view-saved-ind" class="saved-ind"></div>
+</div>
+<div class="card">
+<div class="sec-title">🔒 Senha de Edição do Sistema</div>
+<p style="font-size:.76rem;color:var(--muted);margin-bottom:16px;font-family:'DM Mono',monospace;line-height:1.6">
+Esta é a senha usada no <strong style="color:var(--accent)">login</strong>, quando alguém entra escolhendo "Editar"
+(acesso completo, com permissão de criar/alterar/excluir dados. Lojas e Matriz compartilham a mesma senha).
 </p>
 <div class="field" style="margin-bottom:14px">
 <label>E-mail de Recuperação</label>
@@ -1513,7 +1537,7 @@ Esta é a senha usada para liberar o <strong style="color:var(--accent)">Modo Ed
 onkeydown="if(event.key==='Enter')alterarSenhaSistema()">
 </div>
 </div>
-<button class="btn btn-p" style="margin-top:14px" onclick="alterarSenhaSistema()">💾 Alterar Senha</button>
+<button class="btn btn-p" style="margin-top:14px" onclick="alterarSenhaSistema()">💾 Alterar Senha de Edição</button>
 <div id="senha-sis-saved-ind" class="saved-ind"></div>
 </div>
 <div class="card">
