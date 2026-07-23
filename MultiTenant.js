@@ -117,6 +117,7 @@ async function fazerLogin() {
 
     _usuarioLogadoDoc = Object.assign({ id: doc.id }, dados);
 
+    if (typeof _atualizarBadgeModoPerfil === 'function') _atualizarBadgeModoPerfil();
     document.getElementById('tela-login').style.display = 'none';
     const tela = document.getElementById('tela-perfil');
     if (tela) tela.style.display = 'flex';
