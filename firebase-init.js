@@ -31,12 +31,21 @@ window.dbCentral = firebase.firestore();
 window.dbTenant = null; // só existe depois que um cliente faz login
 
 // ── Inicializa (ou troca) o Firebase do cliente logado ──
-function _initTenantFirebase(cfg) {
-  // Se já havia um tenant carregado (ex: logout e login com outra conta
-  // sem recarregar a página), remove o app anterior antes de criar outro.
+async function _initTenantFirebase(cfg) {
+  // Se o tenant já ativo é o MESMO projeto, reaproveita — evita destruir
+  // e recriar o app à toa a cada tentativa de login (uma das causas da
+  // trava no "Entrando…" quando a senha era digitada errada 2x seguidas).
   const existente = firebase.apps.find(a => a.name === 'tenant');
+  if (existente && existente.options && existente.options.projectId === cfg.projectId) {
+    window.dbTenant = existente.firestore();
+    return window.dbTenant;
+  }
   if (existente) {
-    try { existente.delete(); } catch (e) { console.warn('Falha ao remover app tenant anterior:', e); }
+    // IMPORTANTE: precisa aguardar o delete terminar antes de criar o
+    // próximo app 'tenant' — sem o await, o Firestore novo nasce numa
+    // condição de corrida com o antigo sendo destruído e algumas
+    // chamadas (.get(), etc.) ficam pendentes pra sempre.
+    try { await existente.delete(); } catch (e) { console.warn('Falha ao remover app tenant anterior:', e); }
   }
   const app = firebase.initializeApp(cfg, 'tenant');
   window.dbTenant = app.firestore();
