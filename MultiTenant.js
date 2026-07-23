@@ -52,7 +52,7 @@ function _selecionarModoLogin(modo) {
 // sistema (polyfill/scripts) estar totalmente de pé.
 async function _lerSenhaEdicaoTenantAtual() {
   const snap = await window.dbTenant.collection('config').doc('sistema').get();
-  return snap.exists ? (snap.data().senha || '@MANIFESTO') : '@MANIFESTO';
+  return snap.exists ? (snap.data().senha || '@mudar') : '@mudar';
 }
 
 async function fazerLogin() {
