@@ -1164,7 +1164,7 @@ onkeydown="if(event.key==='Enter')salvarNovoForn()">
 <span id="hist-count-lbl" style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-left:auto;align-self:center"></span>
 </div>
 <!-- Linha 2: filtros -->
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+<div class="g3" style="gap:14px">
 <div class="field"><label>NF</label><input type="text" id="hist-f-nf" placeholder="Buscar por NF…" oninput="filtrarHist()"></div>
 <div class="field"><label>Fornecedor</label>
 <div class="ac-wrap" id="acw-hist-forn">
@@ -1199,7 +1199,7 @@ onkeydown="acHistFornKey(event)">
 <option value="">Todos os compradores…</option>
 </select>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+<div class="g3" style="gap:8px">
 <div class="field"><label>Situação</label>
 <select id="hist-f-sit" onchange="filtrarHist()">
 <option value="">Todas</option>
