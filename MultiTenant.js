@@ -153,32 +153,53 @@ async function _renderListaUsuarios() {
   try {
     const snap = await window.dbCentral.collection('usuarios').orderBy('usuario').get();
     const usuarios = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+
+    const clientes = usuarios.filter(u => !u.isAdmin);
+    const totalEl = document.getElementById('admin-kpi-total');
+    const ativosEl = document.getElementById('admin-kpi-ativos');
+    const inativosEl = document.getElementById('admin-kpi-inativos');
+    if (totalEl) totalEl.textContent = clientes.length;
+    if (ativosEl) ativosEl.textContent = clientes.filter(u => u.ativo !== false).length;
+    if (inativosEl) inativosEl.textContent = clientes.filter(u => u.ativo === false).length;
+
     if (!usuarios.length) {
       box.innerHTML = '<div class="nd">Nenhum usuário cadastrado ainda. Clique em "➕ Novo Usuário".</div>';
       return;
     }
     box.innerHTML = usuarios.map(u => {
+      const inicial = (u.empresa || u.usuario || '?').trim().charAt(0).toUpperCase();
+      const corAvatar = u.isAdmin ? 'var(--accent)' : (u.ativo === false ? 'var(--muted)' : '#4d9fff');
       const detalhes = u.isAdmin
-        ? `usuário: ${esc(u.usuario)}`
-        : `usuário: ${esc(u.usuario)} · senha de visualização: <span class="senha-oculta" data-valor="${esc(u.senha || '')}">••••••</span>` +
-          (u.senhaSistemaAtual ? ` · senha do sistema (edição): <span class="senha-oculta" data-valor="${esc(u.senhaSistemaAtual)}">••••••</span>` : '') +
-          (u.firebaseConfig && u.firebaseConfig.projectId ? ' · projeto: ' + esc(u.firebaseConfig.projectId) : '');
+        ? `<span style="color:var(--muted)">usuário:</span> ${esc(u.usuario)}`
+        : `<span style="color:var(--muted)">usuário:</span> ${esc(u.usuario)}` +
+          ` &nbsp;·&nbsp; <span style="color:var(--muted)">visualização:</span> <span class="senha-oculta" data-valor="${esc(u.senha || '')}">••••••</span>` +
+          (u.senhaSistemaAtual ? ` &nbsp;·&nbsp; <span style="color:var(--muted)">edição:</span> <span class="senha-oculta" data-valor="${esc(u.senhaSistemaAtual)}">••••••</span>` : '') +
+          (u.firebaseConfig && u.firebaseConfig.projectId ? `<br><span style="color:var(--muted)">projeto:</span> ${esc(u.firebaseConfig.projectId)}` : '');
       return `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
-        <div>
-          <div style="font-weight:700">
-            ${esc(u.empresa || u.usuario)}
-            ${u.isAdmin ? ' <span style="color:var(--accent);font-size:.68rem">(ADMIN)</span>' : ''}
-            ${u.ativo === false ? ' <span style="color:var(--danger);font-size:.68rem">(inativo)</span>' : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;
+      background:var(--card2);border:1px solid var(--border);border-radius:14px;
+      padding:16px 18px;margin-bottom:10px;flex-wrap:wrap;transition:border-color .2s"
+      onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="display:flex;gap:14px;align-items:center;min-width:0">
+          <div style="width:42px;height:42px;border-radius:50%;background:${corAvatar}22;border:1.5px solid ${corAvatar};
+          color:${corAvatar};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1rem;flex-shrink:0">
+            ${esc(inicial)}
           </div>
-          <div style="font-family:'DM Mono',monospace;font-size:.74rem;color:var(--muted)">
-            ${detalhes}
+          <div style="min-width:0">
+            <div style="font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              ${esc(u.empresa || u.usuario)}
+              ${u.isAdmin ? '<span style="background:var(--accent);color:#000;font-size:.6rem;font-weight:800;letter-spacing:.5px;padding:2px 8px;border-radius:20px">ADMIN</span>' : ''}
+              ${u.ativo === false ? '<span style="background:var(--danger);color:#fff;font-size:.6rem;font-weight:800;letter-spacing:.5px;padding:2px 8px;border-radius:20px">INATIVO</span>' : ''}
+            </div>
+            <div style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--text);margin-top:4px;line-height:1.6">
+              ${detalhes}
+            </div>
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0">
           ${!u.isAdmin ? `<button class="btn btn-o btn-sm" onclick="_toggleSenhasLinha(this)">👁 Ver senhas</button>` : ''}
-          <button class="btn btn-o btn-sm" onclick="abrirFormUsuario('${u.id}')">Editar</button>
-          ${!u.isAdmin ? `<button class="btn btn-d btn-sm" onclick="excluirUsuario('${u.id}')">Excluir</button>` : ''}
+          <button class="btn btn-o btn-sm" onclick="abrirFormUsuario('${u.id}')">✏ Editar</button>
+          ${!u.isAdmin ? `<button class="btn btn-d btn-sm" onclick="excluirUsuario('${u.id}', '${esc(u.empresa || u.usuario)}')">🗑 Excluir</button>` : ''}
         </div>
       </div>
     `;
@@ -334,8 +355,39 @@ async function _escreverSenhaSistemaNoTenant(firebaseConfig, novaSenha) {
   }
 }
 
-async function excluirUsuario(id) {
-  if (!confirm('Excluir este usuário?\n\nIsso remove só o ACESSO dele ao login. NÃO apaga o projeto Firebase/dados dele — se quiser apagar os dados de verdade, isso precisa ser feito manualmente no Console do Firebase.')) return;
+// ── Modal de confirmação genérico e estilizado (substitui o confirm() nativo) ──
+function confirmModal({ icon = '⚠️', title = 'Confirmar ação', desc = '', confirmLabel = 'Confirmar' } = {}) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('modal-confirm-generico');
+    document.getElementById('mcg-icon').textContent = icon;
+    document.getElementById('mcg-title').textContent = title;
+    document.getElementById('mcg-desc').innerHTML = desc;
+    const btnConfirm = document.getElementById('mcg-confirm');
+    const btnCancel = document.getElementById('mcg-cancel');
+    btnConfirm.textContent = confirmLabel;
+
+    function fechar(resultado) {
+      modal.classList.remove('open');
+      btnConfirm.removeEventListener('click', onConfirm);
+      btnCancel.removeEventListener('click', onCancel);
+      resolve(resultado);
+    }
+    function onConfirm() { fechar(true); }
+    function onCancel() { fechar(false); }
+    btnConfirm.addEventListener('click', onConfirm);
+    btnCancel.addEventListener('click', onCancel);
+    modal.classList.add('open');
+  });
+}
+
+async function excluirUsuario(id, nomeExibicao) {
+  const ok = await confirmModal({
+    icon: '🗑️',
+    title: 'Excluir usuário',
+    desc: `Deseja realmente excluir <strong style="color:var(--text)">${esc(nomeExibicao || '')}</strong>?<br><br>Isso remove só o ACESSO dele ao login. NÃO apaga o projeto Firebase/dados dele — se quiser apagar os dados de verdade, isso precisa ser feito manualmente no Console do Firebase.`,
+    confirmLabel: '🗑 Excluir'
+  });
+  if (!ok) return;
   try {
     await window.dbCentral.collection('usuarios').doc(id).delete();
     toast('✓ Usuário excluído.');
