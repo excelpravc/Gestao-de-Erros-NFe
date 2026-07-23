@@ -274,6 +274,12 @@ Gestão de <em style="color:var(--accent);font-style:normal">Erros</em>
 Selecione seu perfil para continuar
 </p>
 </div>
+<div id="tela-perfil-modo" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;
+background:var(--card2);border:1px solid var(--border);border-radius:30px;padding:8px 10px 8px 18px;
+font-family:'DM Mono',monospace;font-size:.74rem;">
+<span id="tela-perfil-modo-label" style="color:var(--muted)">Acessando em <strong id="tela-perfil-modo-tipo" style="color:var(--accent)">—</strong></span>
+<button class="btn btn-o btn-sm" onclick="_voltarParaLogin()">↩ Voltar ao login</button>
+</div>
 <div id="tela-perfil-cards" style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;">
 <div id="card-lojas" onclick="selecionarPerfil('Lojas')"
 style="background:var(--card2);border:2px solid #00d4aa30;border-radius:20px;
@@ -360,6 +366,38 @@ function selecionarPerfil(nome) {
 // Modo (Visualizar/Editar) e senha já foram validados na tela de login —
 // aqui só resta aplicar o perfil (Lojas/Matriz) e entrar direto no sistema.
 _prosseguirComPerfil(nome);
+}
+// ── Badge "Acessando em Visualização/Edição" na tela de seleção de perfil ──
+function _atualizarBadgeModoPerfil() {
+const el = document.getElementById('tela-perfil-modo-tipo');
+if (!el) return;
+if (window._MODO_VISUALIZACAO) {
+el.textContent = '👁 Visualização';
+el.style.color = '#f5a623';
+} else {
+el.textContent = '✏ Edição';
+el.style.color = 'var(--accent)';
+}
+}
+// ── Botão "Voltar ao login" — usado quando a pessoa percebe que entrou
+//    no modo errado (Visualizar/Editar) e quer logar de novo direito ──
+async function _voltarParaLogin() {
+const telaPerfil = document.getElementById('tela-perfil');
+const telaLogin = document.getElementById('tela-login');
+if (telaPerfil) telaPerfil.style.display = 'none';
+if (telaLogin) telaLogin.style.display = 'flex';
+document.getElementById('login-senha-inp').value = '';
+document.getElementById('login-erro').style.display = 'none';
+setTimeout(() => document.getElementById('login-senha-inp').focus(), 80);
+window._MODO_VISUALIZACAO = false;
+document.body.classList.remove('modo-visualizacao');
+// Desconecta o banco do cliente logado, pra não ficar um tenant
+// "fantasma" ativo caso a pessoa entre com outro usuário/senha/modo.
+const tenantApp = (typeof firebase !== 'undefined') ? firebase.apps.find(a => a.name === 'tenant') : null;
+if (tenantApp) {
+try { await tenantApp.delete(); } catch (e) { console.warn('Falha ao desconectar banco do cliente:', e); }
+}
+window.dbTenant = null;
 }
 // As funções abaixo (modal "Como deseja acessar?" e modal de Senha de
 // Edição) ficaram sem uso no fluxo normal — a escolha do modo e a senha
