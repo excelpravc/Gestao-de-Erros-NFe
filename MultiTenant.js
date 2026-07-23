@@ -101,7 +101,7 @@ async function fazerLogin() {
     // Conecta no banco do cliente ANTES de checar a senha de edição,
     // já que ela mora dentro do banco dele (não no diretório central).
     window.CURRENT_USUARIO_ID = doc.id;
-    _initTenantFirebase(dados.firebaseConfig);
+    await _initTenantFirebase(dados.firebaseConfig);
 
     if (modo === 'edit') {
       const senhaEdicaoReal = await _lerSenhaEdicaoTenantAtual();
@@ -176,7 +176,7 @@ async function _renderListaUsuarios() {
           (u.senhaSistemaAtual ? ` &nbsp;·&nbsp; <span style="color:var(--muted)">edição:</span> <span class="senha-oculta" data-valor="${esc(u.senhaSistemaAtual)}">••••••</span>` : '') +
           (u.firebaseConfig && u.firebaseConfig.projectId ? `<br><span style="color:var(--muted)">projeto:</span> ${esc(u.firebaseConfig.projectId)}` : '');
       return `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;
+      <div class="usu-row" style="display:flex;justify-content:space-between;align-items:center;gap:14px;
       background:var(--card2);border:1px solid var(--border);border-radius:14px;
       padding:16px 18px;margin-bottom:10px;flex-wrap:wrap;transition:border-color .2s"
       onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
@@ -211,7 +211,7 @@ async function _renderListaUsuarios() {
 }
 
 function _toggleSenhasLinha(btn) {
-  const linha = btn.closest('div[style*="justify-content:space-between"]');
+  const linha = btn.closest('.usu-row');
   const spans = linha.querySelectorAll('.senha-oculta');
   const revelado = btn.textContent.includes('Ocultar');
   spans.forEach(s => { s.textContent = revelado ? '••••••' : s.dataset.valor; });
