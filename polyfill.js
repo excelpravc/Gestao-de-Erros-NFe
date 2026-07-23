@@ -150,7 +150,7 @@
     const db = getDb();
     const ref = db.collection('config').doc('sistema');
     const snap = await ref.get();
-    const senhaSalva = snap.exists ? (snap.data().senha || '@MANIFESTO') : '@MANIFESTO';
+    const senhaSalva = snap.exists ? (snap.data().senha || '@mudar') : '@mudar';
     if (String(atual) !== String(senhaSalva)) return { ok: false, msg: 'Senha atual incorreta!' };
     await ref.set({ senha: nova }, { merge: true });
     // Espelha a senha atualizada no diretório central, pra o ADM sempre
