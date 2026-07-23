@@ -81,6 +81,22 @@ function trocarPerfil() {
 const badge = document.getElementById('badge-usuario-fixo');
 if (badge) badge.remove();
 window._PERFIL = null;
+// Limpa os campos de "Responsáveis" (Comprador/Comercial/Loja/Manifesto)
+// ANTES de mostrar a tela de perfil de novo — sem isso, valores do
+// perfil anterior (ex: Loja travada em "Matriz") ficavam "grudados"
+// na tela mesmo depois de trocar pro perfil Lojas.
+['sel_comp','sel_comerc','sel_loja','sel_manif'].forEach(id=>{
+const el=document.getElementById(id);
+if (el) { el.innerHTML='<option value="">Selecione…</option>'; el.value=''; el.disabled=false; el.style.opacity=''; el.style.cursor=''; }
+});
+['em_comp','em_comerc','em_loja','em_manif'].forEach(id=>{
+const el=document.getElementById(id);
+if (el) { el.textContent='—'; el.className = id==='em_manif' ? 'ps-email' : 'ps-email dis'; }
+});
+['hid_comp_email','hid_comp_nome','hid_comerc_email','hid_comerc_nome','hid_loja_email','hid_loja_nome','hid_manif_email','hid_manif_nome'].forEach(id=>{
+const el=document.getElementById(id);
+if (el) el.value='';
+});
 const tela = document.getElementById('tela-perfil');
 if (tela) tela.style.display = 'flex';
 }
