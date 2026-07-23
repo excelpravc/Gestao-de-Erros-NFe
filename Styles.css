@@ -433,7 +433,7 @@ background:#6b7a99;border-radius:50%;transition:transform .25s,background .25s}
 .toggle-item.checked .toggle-slider::after{transform:translateX(18px);background:var(--accent)}
 .toggle-label{font-size:.82rem;font-weight:700;color:var(--text);flex-shrink:0;min-width:140px}
 .toggle-desc{font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);flex:1;
-overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toggle-item:not(.checked) .toggle-label{color:var(--muted)}
 /* ════════════════════════════════ MODAL ═══ */
 .modal-bg{position:fixed;inset:0;background:#00000095;backdrop-filter:blur(5px);
@@ -601,6 +601,9 @@ letter-spacing:.3px;
 .ph>div{flex-wrap:wrap}
 .re-header,.checkbox-group,.toggle-grid{flex-wrap:wrap}
 .field input,.field select,.field textarea{font-size:16px}
+.toggle-item{flex-wrap:wrap}
+.toggle-label{min-width:0}
+.toggle-desc{flex-basis:100%;white-space:normal;overflow:visible;text-overflow:clip;margin-left:52px;margin-top:2px}
 }
 @media(max-width:480px){
 .kpi-grid{grid-template-columns:repeat(2,1fr);gap:8px}
