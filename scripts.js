@@ -1129,15 +1129,19 @@ if (id === 'p-dashnfs' && DNFS.activeSheet && DNFS.sheets[DNFS.activeSheet]) {
 setTimeout(function() { dnfsRenderKPIs(); dnfsRenderCharts(); }, 80);
 }
 }
-document.addEventListener('_SistemaCarregado', function() {
+document.addEventListener('_sistemaCarregado', function() {
 document.querySelectorAll('.sb .tab').forEach(btn=>{
 btn.style.userSelect='none';btn.style.webkitUserSelect='none';
 btn.ondragstart=()=>false;
 Array.from(btn.children).forEach(child=>{child.style.pointerEvents='none';});
 });
+// Assim que o sistema termina de carregar (tela inicial = Dashboard ERROS),
+// já dispara automaticamente o mesmo efeito do botão "Gerar Dashboard" —
+// sem precisar que a pessoa clique manualmente.
 setTimeout(function(){
 if(document.getElementById('p-dash')?.classList.contains('on')) {
 initDashDates();
+populateDashFilters();
 gerarDash();
 }
 }, 400);
