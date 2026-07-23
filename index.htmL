@@ -123,13 +123,13 @@ Gestão de <em style="color:var(--accent);font-style:normal">Clientes</em>
 <div class="modal-box" style="max-width:520px;text-align:left;max-height:88vh;overflow-y:auto">
 <h3 id="modal-usuario-titulo">➕ Novo Usuário</h3>
 <input type="hidden" id="usu-doc-id">
-<div class="field"><label>Usuário (login)</label><input type="text" id="usu-usuario" placeholder="ex: clienteA"></div>
-<div class="field"><label>Senha de Visualização (usada no login, modo Visualizar)</label><input type="text" id="usu-senha" placeholder="senha de acesso"></div>
-<div class="field"><label>Nome da Empresa</label><input type="text" id="usu-empresa" placeholder="Empresa do cliente"></div>
+<div class="field"><label>Usuário (login)</label><input type="text" id="usu-usuario" placeholder="ex: clienteA" autocomplete="off"></div>
+<div class="field"><label>Senha de Visualização (usada no login, modo Visualizar)</label><input type="text" id="usu-senha" placeholder="senha de acesso" autocomplete="new-password"></div>
+<div class="field"><label>Nome da Empresa</label><input type="text" id="usu-empresa" placeholder="Empresa do cliente" autocomplete="off"></div>
 <div class="field"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="usu-ativo" checked style="width:auto">Usuário ativo</label></div>
 <div class="field" id="usu-senha-sistema-wrap" style="display:none">
 <label>Senha do Sistema (Modo Edição dentro do app do cliente)</label>
-<input type="text" id="usu-senha-sistema" placeholder="carregando…">
+<input type="text" id="usu-senha-sistema" placeholder="carregando…" autocomplete="new-password">
 <p style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:4px">
 Essa é a senha que o cliente usa para liberar Edição (Lojas/Matriz) dentro do sistema dele. É carregada automaticamente do banco dele — altere aqui pra trocar direto.
 </p>
