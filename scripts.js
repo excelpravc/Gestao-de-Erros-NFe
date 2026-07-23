@@ -43,39 +43,39 @@ return perfilFn.apply(null, args);
 return fallback.apply(null, args);
 }
 function _atualizarBadgeUsuario(nome, emoji, cor) {
-let badge = document.getElementById('badge-usuario-fixo');
-if (!badge) {
-badge = document.createElement('div');
-badge.id = 'badge-usuario-fixo';
-badge.style.cssText = [
-'display:flex','align-items:center','gap:8px',
-'background:var(--card2)','border:1px solid var(--border)',
-'border-radius:10px','padding:8px 12px',
-'cursor:pointer','transition:border-color .2s,box-shadow .2s',
-'margin-top:8px','width:100%',
-].join(';');
-badge.title = 'Clique para trocar de perfil';
-badge.addEventListener('click', trocarPerfil);
-badge.addEventListener('mouseenter', () => { badge.style.boxShadow = '0 6px 24px #00000060'; });
-badge.addEventListener('mouseleave', () => { badge.style.boxShadow = ''; });
-// Insere no sidebar, logo abaixo do parágrafo de versão
-const sbLogo = document.querySelector('.sb-logo');
-if (sbLogo) {
-sbLogo.appendChild(badge);
-}
-}
-badge.style.borderColor = cor + '50';
-const modoTag = window._MODO_VISUALIZACAO
-? '<span title="Modo Visualização" style="flex-shrink:0;font-size:.85rem;line-height:1">👁</span>'
-: '<span title="Modo Edição" style="flex-shrink:0;font-size:.78rem;line-height:1;color:var(--accent)">✏</span>';
-badge.innerHTML =
-'<span style="font-size:1.1rem;line-height:1;flex-shrink:0">' + emoji + '</span>' +
-'<div style="flex:1;min-width:0">' +
-'<div style="font-size:.5rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);line-height:1;margin-bottom:3px">Perfil ativo</div>' +
-'<div style="font-size:.82rem;font-weight:800;color:' + cor + ';line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + nome + '</div>' +
-'</div>' +
-modoTag +
-'<span style="font-size:.65rem;color:var(--muted);flex-shrink:0">⇄</span>';
+  let badge = document.getElementById('badge-usuario-fixo');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 'badge-usuario-fixo';
+    badge.style.cssText = [
+      'display:flex','align-items:center','gap:10px',
+      'background:var(--card2)','border:1px solid var(--border)',
+      'border-radius:12px','padding:10px 14px',
+      'cursor:pointer','transition:border-color .2s,box-shadow .2s',
+      'margin-top:8px','width:100%',
+    ].join(';');
+    badge.title = 'Clique para trocar de perfil';
+    badge.addEventListener('click', trocarPerfil);
+    badge.addEventListener('mouseenter', () => { badge.style.boxShadow = '0 6px 24px #00000060'; });
+    badge.addEventListener('mouseleave', () => { badge.style.boxShadow = ''; });
+    const sbLogo = document.querySelector('.sb-logo');
+    if (sbLogo) {
+      sbLogo.appendChild(badge);
+    }
+  }
+  badge.style.borderColor = cor + '50';
+  const modoIcon = window._MODO_VISUALIZACAO ? '👁' : '✏';
+  const modoTitle = window._MODO_VISUALIZACAO ? 'Modo Visualização' : 'Modo Edição';
+  badge.innerHTML =
+    '<div style="font-size:1.6rem;line-height:1;flex-shrink:0">' + emoji + '</div>' +
+    '<div style="flex:1;min-width:0">' +
+    ' <div style="font-size:.55rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);line-height:1;margin-bottom:4px">Perfil ativo</div>' +
+    ' <div style="font-size:1rem;font-weight:800;color:' + cor + ';line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + nome + '</div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
+    ' <span style="font-size:.9rem;line-height:1;color:' + cor + '" title="' + modoTitle + '">' + modoIcon + '</span>' +
+    ' <span style="font-size:.75rem;color:var(--muted);line-height:1">⇌</span>' +
+    '</div>';
 }
 function trocarPerfil() {
 const badge = document.getElementById('badge-usuario-fixo');
