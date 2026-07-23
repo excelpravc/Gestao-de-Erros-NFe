@@ -2636,7 +2636,7 @@ if (!de || !ate) { toast('Selecione o período!', true); return; }
 const lbl = document.getElementById('hist-count-lbl');
 const tb  = document.getElementById('tb-hist');
 if (lbl) lbl.textContent = '⏳ Buscando na base de dados...';
-if (tb)  tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);font-style:italic">Consultando planilha...</td></tr>';
+if (tb)  tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);font-style:italic">Consultando Sistema...</td></tr>';
 google.script.run
 .withSuccessHandler(function(lista) {
 DB.historico = lista || [];
