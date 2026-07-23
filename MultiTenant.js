@@ -284,7 +284,7 @@ async function _lerSenhaSistemaDoTenant(firebaseConfig) {
   try {
     const db = app.firestore();
     const snap = await db.collection('config').doc('sistema').get();
-    return snap.exists ? (snap.data().senha || '@MANIFESTO') : '@MANIFESTO';
+    return snap.exists ? (snap.data().senha || '@mudar') : '@mudar';
   } finally {
     try { await app.delete(); } catch (e) { console.warn('Falha ao fechar conexão temporária:', e); }
   }
