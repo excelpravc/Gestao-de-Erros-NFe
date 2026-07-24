@@ -535,7 +535,7 @@ window._PERFIL = null;
 <span class="ico">📂</span><span class="tab-label">Histórico</span>
 </button>
 <button class="tab" onclick="showPage('p-mva')">
-<span class="ico">🧮</span><span class="tab-label">Calculadora MVA</span>
+<span class="ico">🧮</span><span class="tab-label">Calc. Tributária</span>
 </button>
 <div class="sb-sec">Cadastros</div>
 <button class="tab" onclick="showPage('p-erros')">
@@ -1780,12 +1780,14 @@ O Manifesto sempre vai para <strong style="color:var(--accent)">CC</strong>.
 <div class="page" id="p-mva">
 <div class="ph">
 <div class="ph-left">
-<h1>🧮 Calculadora <em>MVA</em></h1>
-<p>Cálculo de preço base com desconto MVA-ST</p>
+<h1>🧮 Calc. <em>Tributária</em></h1>
+<p>Cálculo de preço base com MVA-ST e redução direta de ICMS/FECP</p>
 </div>
 </div>
-<div class="card" style="max-width:520px;">
-<div class="sec-title">Parâmetros do Cálculo</div>
+<div class="g2" style="align-items:start">
+<div>
+<div class="card" style="margin-bottom:14px">
+<div class="sec-title">Parâmetros do Cálculo (MVA-ST)</div>
 <div style="display:flex;flex-direction:column;gap:16px;">
 <!-- Cadastro Interno -->
 <div class="field">
@@ -1860,7 +1862,7 @@ border:1px solid #00d4aa30;background:#00d4aa08;color:var(--muted2);line-height:
 </div>
 </div>
 <!-- Card de referência rápida -->
-<div class="card" style="max-width:520px;">
+<div class="card">
 <div class="sec-title">Referência Rápida</div>
 <div style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted);line-height:2;">
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;margin-bottom:8px;">
@@ -1878,6 +1880,64 @@ border:1px solid #00d4aa30;background:#00d4aa08;color:var(--muted2);line-height:
 </div>
 </div>
 <div>Exemplo: 29,01 com MVA 33,5% → 29,01 × (1 − 0,335) = <strong style="color:var(--accent);">19,29</strong></div>
+</div>
+</div>
+</div>
+<div>
+<div class="card">
+<div class="sec-title">🧮 Cálculo Direto (Redução Fixa)</div>
+<p style="font-size:.72rem;color:var(--muted);margin-bottom:16px;font-family:'DM Mono',monospace;line-height:1.6">
+Aplica percentual de redução direto sobre o valor do produto, e calcula ICMS + FECP sobre a base já reduzida.
+</p>
+<div style="display:flex;flex-direction:column;gap:16px;">
+<div class="field">
+<label>Valor do Produto (R$) <span class="req">*</span></label>
+<input type="text" id="red-valor" placeholder="0,00" autocomplete="off" oninput="calcReducaoDireta()" style="font-size:1.05rem;font-weight:700;">
+</div>
+<div class="field">
+<label>Percentual de Redução (%) <span class="req">*</span></label>
+<input type="text" id="red-pct" placeholder="Ex: 68,19" autocomplete="off" oninput="calcReducaoDireta()">
+</div>
+<div class="g2">
+<div class="field">
+<label>Alíquota ICMS (%)</label>
+<input type="text" id="red-icms" placeholder="Ex: 20" autocomplete="off" oninput="calcReducaoDireta()">
+</div>
+<div class="field">
+<label>Alíquota FECP (%)</label>
+<input type="text" id="red-fecp" placeholder="Ex: 2" autocomplete="off" oninput="calcReducaoDireta()">
+</div>
+</div>
+<button class="btn btn-p btn-full" onclick="calcReducaoDireta()">Calcular Redução Direta</button>
+<div style="height:1px;background:var(--border);margin:2px 0;"></div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div class="red-res-row" style="display:flex;justify-content:space-between;align-items:center;background:var(--inp);border:1px solid var(--inpb);border-radius:var(--r);padding:10px 14px">
+<span style="font-size:.74rem;color:var(--muted);font-family:'DM Mono',monospace">Valor do Produto</span>
+<span id="red-out-valor" style="font-family:'DM Mono',monospace;font-weight:700">R$ 0,00</span>
+</div>
+<div class="red-res-row" style="display:flex;justify-content:space-between;align-items:center;background:var(--inp);border:1px solid var(--inpb);border-radius:var(--r);padding:10px 14px">
+<span style="font-size:.74rem;color:var(--muted);font-family:'DM Mono',monospace">Valor da Redução</span>
+<span id="red-out-reducao" style="font-family:'DM Mono',monospace;font-weight:700;color:var(--warn)">R$ 0,00</span>
+</div>
+<div class="red-res-row" style="display:flex;justify-content:space-between;align-items:center;background:var(--inp);border:1px solid var(--inpb);border-radius:var(--r);padding:10px 14px">
+<span style="font-size:.74rem;color:var(--muted);font-family:'DM Mono',monospace">Base de Cálculo Reduzida</span>
+<span id="red-out-base" style="font-family:'DM Mono',monospace;font-weight:700;color:var(--info)">R$ 0,00</span>
+</div>
+<div class="red-res-row" style="display:flex;justify-content:space-between;align-items:center;background:var(--inp);border:1px solid var(--inpb);border-radius:var(--r);padding:10px 14px">
+<span style="font-size:.74rem;color:var(--muted);font-family:'DM Mono',monospace">Valor ICMS</span>
+<span id="red-out-icms" style="font-family:'DM Mono',monospace;font-weight:700">R$ 0,00</span>
+</div>
+<div class="red-res-row" style="display:flex;justify-content:space-between;align-items:center;background:var(--inp);border:1px solid var(--inpb);border-radius:var(--r);padding:10px 14px">
+<span style="font-size:.74rem;color:var(--muted);font-family:'DM Mono',monospace">Valor FECP</span>
+<span id="red-out-fecp" style="font-family:'DM Mono',monospace;font-weight:700">R$ 0,00</span>
+</div>
+<div class="red-res-row" style="display:flex;justify-content:space-between;align-items:center;background:#00d4aa10;border:1px solid #00d4aa30;border-radius:var(--r);padding:10px 14px">
+<span style="font-size:.78rem;color:var(--text);font-weight:700;font-family:'DM Mono',monospace">Total ICMS + FECP</span>
+<span id="red-out-total" style="font-family:'DM Mono',monospace;font-weight:800;font-size:1.05rem;color:var(--accent)">R$ 0,00</span>
+</div>
+</div>
+</div>
+</div>
 </div>
 </div>
 </div><!-- /#p-mva -->
