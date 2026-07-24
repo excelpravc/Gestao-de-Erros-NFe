@@ -1895,7 +1895,7 @@ status: statusAtual,
 loja:   lojaAtual,
 });
 })
-.loadHistFiltrado('2000-01-01', new Date().toISOString().split('T')[0], _perfilAtivo());
+.buscarDanfNoHistorico(danf, _perfilAtivo());
 return;
 }
 _executarCpJust(btn, txt, danf, lojaAtual);
@@ -2279,7 +2279,7 @@ if (!conflitos.length) { onConfirmado(); return; }
 toast('⚠️ Busca offline: verificando apenas registros em memória.', true);
 onConfirmado();
 })
-.loadHistFiltrado('2000-01-01', new Date().toISOString().split('T')[0], _perfilAtivo());
+.buscarDanfNoHistorico(danfVal, _perfilAtivo());
 }
 const justSel  = document.getElementById('sel_just');
 const justOpt  = justSel ? justSel.options[justSel.selectedIndex] : null;
