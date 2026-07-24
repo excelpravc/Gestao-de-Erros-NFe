@@ -3795,6 +3795,25 @@ if(validEl){const fator=(1-mva/100).toFixed(4).replace('.',',');const reducao=(c
 }
 function mvacopiar(btn){const val=document.getElementById('mva-resultado').value;if(!val)return;navigator.clipboard.writeText(val).then(()=>{btn.textContent='Copiado!';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copiar';btn.classList.remove('ok');},1500);toast('✓ Resultado copiado!');}).catch(()=>{try{const ta=document.createElement('textarea');ta.value=val;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);btn.textContent='Copiado!';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copiar';btn.classList.remove('ok');},1500);toast('✓ Resultado copiado!');}catch(e){toast('Não foi possível copiar automaticamente. Selecione e copie manualmente.',true);}});}
 function mvaLimpar(){document.getElementById('mva-cadastro').value='';document.getElementById('mva-pct').value='33,5';document.getElementById('mva-resultado').value='';document.getElementById('mva-resultado').placeholder='Preencha os campos acima…';const copyBtn=document.getElementById('mva-copiar-btn');if(copyBtn)copyBtn.style.display='none';const validEl=document.getElementById('mva-validacao');if(validEl)validEl.style.display='none';document.getElementById('mva-cadastro').focus();}
+// ── CÁLCULO DIRETO (Redução Fixa) — ICMS + FECP sobre base já reduzida ──
+function _fmtBRL(n){if(isNaN(n))n=0;return 'R$ '+n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function calcReducaoDireta(){
+const valorProduto=_mvaParseNum(document.getElementById('red-valor').value)||0;
+const pctReducao=_mvaParseNum(document.getElementById('red-pct').value)||0;
+const pctIcms=_mvaParseNum(document.getElementById('red-icms').value)||0;
+const pctFecp=_mvaParseNum(document.getElementById('red-fecp').value)||0;
+const valorReducao=valorProduto*(pctReducao/100);
+const baseReduzida=valorProduto-valorReducao;
+const valorIcms=baseReduzida*(pctIcms/100);
+const valorFecp=baseReduzida*(pctFecp/100);
+const total=valorIcms+valorFecp;
+document.getElementById('red-out-valor').textContent=_fmtBRL(valorProduto);
+document.getElementById('red-out-reducao').textContent=_fmtBRL(valorReducao);
+document.getElementById('red-out-base').textContent=_fmtBRL(baseReduzida);
+document.getElementById('red-out-icms').textContent=_fmtBRL(valorIcms);
+document.getElementById('red-out-fecp').textContent=_fmtBRL(valorFecp);
+document.getElementById('red-out-total').textContent=_fmtBRL(total);
+}
 // ── EXPORTAR PDF DASHBOARD NFS ─
 async function exportarDashNfsPdf() {
 if(!DNFS.activeSheet||!DNFS.sheets[DNFS.activeSheet]){toast('Importe uma planilha primeiro!',true);return;}
