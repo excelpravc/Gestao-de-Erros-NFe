@@ -2661,59 +2661,61 @@ document.getElementById('hist-ate').value = fmt(hoje);
 buscarHistPeriodo();
 }
 function buscarHistPeriodo() {
-const de  = document.getElementById('hist-de').value;
-const ate = document.getElementById('hist-ate').value;
-if (!de || !ate) { toast('Selecione o período!', true); return; }
-const lbl = document.getElementById('hist-count-lbl');
-const tb  = document.getElementById('tb-hist');
-if (lbl) lbl.textContent = '⏳ Buscando na base de dados...';
-if (tb)  tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);font-style:italic">Consultando Sistema...</td></tr>';
-google.script.run
-.withSuccessHandler(function(lista) {
-DB.historico = lista || [];
-_histCarregado = true;
-filtrarHist();
-gerarDash();
-const fmtD = v => { const p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
-if (lbl) lbl.textContent = (lista||[]).length + ' registro(s) · ' + fmtD(de) + ' → ' + fmtD(ate);
-const hoje = new Date(); hoje.setHours(0,0,0,0);
-let vencidas = [], proximas = [];
-(lista||[]).forEach(function(r) {
-if (!r.vencimento || String(r.vencimento).trim() === '') return;
-if (r.situacao === 'Lançada') return;
-const vStr = String(r.vencimento).trim().split('T')[0];
-let vd = null;
-if (vStr.includes('/')) { const p=vStr.split('/'); if(p.length===3) vd=new Date(Number(p[2]),Number(p[1])-1,Number(p[0])); }
-else if (vStr.includes('-')) { const p=vStr.split('-'); if(p.length===3) vd=new Date(Number(p[0]),Number(p[1])-1,Number(p[2])); }
-if (!vd || isNaN(vd.getTime())) return;
-vd.setHours(0,0,0,0);
-const diff = Math.ceil((vd - hoje) / 86400000);
-if (diff < 0) vencidas.push({ danf: r.danf, dias: Math.abs(diff) });
-else if (diff <= 7) proximas.push({ danf: r.danf, dias: diff });
-});
-if (!vencidas.length && !proximas.length) {
-toast('✓ Busca concluída!');
-} else {
-const partes = [];
-if (vencidas.length) {
-const nfs = vencidas.slice(0,2).map(v => 'NF ' + v.danf + ' (' + v.dias + 'd vencida)').join(' | ');
-const extra = vencidas.length > 2 ? ' +' + (vencidas.length-2) : '';
-partes.push('🔴 ' + vencidas.length + ' vencida' + (vencidas.length>1?'s':'') + ': ' + nfs + extra);
-}
-if (proximas.length) {
-const nfs = proximas.slice(0,2).map(v => v.dias===0 ? 'NF ' + v.danf + ' (hoje)' : 'NF ' + v.danf + ' (' + v.dias + 'd)').join(' | ');
-const extra = proximas.length > 2 ? ' +' + (proximas.length-2) : '';
-partes.push('🟠 ' + proximas.length + ' a vencer: ' + nfs + extra);
-}
-toast('⚠ ' + partes.join('  ·  '), true, 5000);
-setTimeout(function() { mostrarAlertasVencimento(lista || []); }, 300);
-}
-})
-.withFailureHandler(function(e) {
-if (lbl) lbl.textContent = 'Erro ao carregar';
-toast('Falha: ' + e.message, true);
-})
-.loadHistFiltrado(de, ate, _perfilAtivo());
+    const de  = document.getElementById('hist-de').value;
+    const ate = document.getElementById('hist-ate').value;
+    if (!de || !ate) { toast('Selecione o período!', true); return; }
+    const lbl = document.getElementById('hist-count-lbl');
+    const tb  = document.getElementById('tb-hist');
+    if (lbl) lbl.textContent = '⏳ Buscando na base de dados...';
+    if (tb)  tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);font-style:italic">Consultando Sistema...</td></tr>';
+    google.script.run
+    .withSuccessHandler(function(lista) {
+        // ⚠️ AQUI ESTÁ A MUDANÇA: pegamos apenas os primeiros 100 registros
+        const listaLimitada = (lista || []).slice(0, 100);
+        DB.historico = listaLimitada;
+        _histCarregado = true;
+        filtrarHist();
+        gerarDash();
+        const fmtD = v => { const p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+        if (lbl) lbl.textContent = listaLimitada.length + ' de ' + (lista||[]).length + ' registro(s) · ' + fmtD(de) + ' → ' + fmtD(ate);
+        const hoje = new Date(); hoje.setHours(0,0,0,0);
+        let vencidas = [], proximas = [];
+        (listaLimitada||[]).forEach(function(r) {
+            if (!r.vencimento || String(r.vencimento).trim() === '') return;
+            if (r.situacao === 'Lançada') return;
+            const vStr = String(r.vencimento).trim().split('T')[0];
+            let vd = null;
+            if (vStr.includes('/')) { const p=vStr.split('/'); if(p.length===3) vd=new Date(Number(p[2]),Number(p[1])-1,Number(p[0])); }
+            else if (vStr.includes('-')) { const p=vStr.split('-'); if(p.length===3) vd=new Date(Number(p[0]),Number(p[1])-1,Number(p[2])); }
+            if (!vd || isNaN(vd.getTime())) return;
+            vd.setHours(0,0,0,0);
+            const diff = Math.ceil((vd - hoje) / 86400000);
+            if (diff < 0) vencidas.push({ danf: r.danf, dias: Math.abs(diff) });
+            else if (diff <= 7) proximas.push({ danf: r.danf, dias: diff });
+        });
+        if (!vencidas.length && !proximas.length) {
+            toast('✓ Busca concluída!');
+        } else {
+            const partes = [];
+            if (vencidas.length) {
+                const nfs = vencidas.slice(0,2).map(v => 'NF ' + v.danf + ' (' + v.dias + 'd vencida)').join(' | ');
+                const extra = vencidas.length > 2 ? ' +' + (vencidas.length-2) : '';
+                partes.push('🔴 ' + vencidas.length + ' vencida' + (vencidas.length >1?'s':'') + ': ' + nfs + extra);
+            }
+            if (proximas.length) {
+                const nfs = proximas.slice(0,2).map(v => v.dias===0 ? 'NF ' + v.danf + ' (hoje)' : 'NF ' + v.danf + ' (' + v.dias + 'd)').join(' | ');
+                const extra = proximas.length > 2 ? ' +' + (proximas.length-2) : '';
+                partes.push('🟠 ' + proximas.length + ' a vencer: ' + nfs + extra);
+            }
+            toast('⚠ ' + partes.join('  ·  '), true, 5000);
+            setTimeout(function() { mostrarAlertasVencimento(listaLimitada || []); }, 300);
+        }
+    })
+    .withFailureHandler(function(e) {
+        if (lbl) lbl.textContent = 'Erro ao carregar';
+        toast('Falha: ' + e.message, true);
+    })
+    .loadHistFiltrado(de, ate, _perfilAtivo());
 }
 function filtrarHist() {
 const fNf     = (document.getElementById('hist-f-nf')?.value     || '').trim().toLowerCase();
