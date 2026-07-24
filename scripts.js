@@ -110,7 +110,7 @@ document.head.appendChild(fixMenu);
 // ─ ESTADO GLOBAL ──
 let DB={compradores:[],comerciais:[],lojas:[],manifestos:[],codErros:[],fornecedores:[],historico:[],regras:[],justificativas:[],gruposLoja:[]};
 let cfg={nome:'',tel:'',cargo:''};
-let _histCompleto = []; // Guarda TODOS os registros para paginação
+let _histCompleto = []; // Guarda TODOS os registros na memória para paginação
 
 // ════════════════════════════════════════════════════════════════
 //  PAGINAÇÃO DO HISTÓRICO
@@ -2669,21 +2669,25 @@ function buscarHistPeriodo() {
     const tb  = document.getElementById('tb-hist');
     if (lbl) lbl.textContent = '⏳ Buscando na base de dados...';
     if (tb)  tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);font-style:italic">Consultando Sistema...</td></tr>';
+    
     google.script.run
-        .withSuccessHandler(function(lista) {
-        // ⚠️ AQUI ESTÁ A MUDANÇA: pegamos apenas os primeiros 100 registros
-        const listaLimitada = (lista || []).slice(0, 100);
-        DB.historico = listaLimitada;
+    .withSuccessHandler(function(lista) {
+        // 1. Guarda TODOS os registros na memória para paginação frontend
+        _histCompleto = lista || [];
+        
+        // 2. Mostra apenas os primeiros 100 na tela inicialmente
+        DB.historico = _histCompleto.slice(0, 100);
+        
         _histCarregado = true;
         filtrarHist();
         gerarDash();
         
         const fmtD = v => { const p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
-        if (lbl) lbl.textContent = listaLimitada.length + ' de ' + (lista||[]).length + ' registro(s) · ' + fmtD(de) + ' → ' + fmtD(ate);
+        if (lbl) lbl.textContent = DB.historico.length + ' de ' + _histCompleto.length + ' registro(s) · ' + fmtD(de) + ' → ' + fmtD(ate);
         
         const hoje = new Date(); hoje.setHours(0,0,0,0);
         let vencidas = [], proximas = [];
-        (listaLimitada||[]).forEach(function(r) {
+        (DB.historico||[]).forEach(function(r) {
             if (!r.vencimento || String(r.vencimento).trim() === '') return;
             if (r.situacao === 'Lançada') return;
             const vStr = String(r.vencimento).trim().split('T')[0];
@@ -2712,13 +2716,13 @@ function buscarHistPeriodo() {
                 partes.push('🟠 ' + proximas.length + ' a vencer: ' + nfs + extra);
             }
             toast('⚠ ' + partes.join('  ·  '), true, 5000);
-            setTimeout(function() { mostrarAlertasVencimento(listaLimitada || []); }, 300);
+            setTimeout(function() { mostrarAlertasVencimento(DB.historico || []); }, 300);
         }
-
-        // 🎯 LÓGICA DO BOTÃO "CARREGAR MAIS"
+        
+        // 3. Lógica do botão "Carregar Mais"
         const btnMais = document.getElementById('btn-hist-carregar-mais');
         if (btnMais) {
-            if ((lista || []).length > 100) {
+            if (_histCompleto.length > 100) {
                 btnMais.style.display = 'block';
             } else {
                 btnMais.style.display = 'none';
@@ -3999,7 +4003,32 @@ toast('✓ Grupo salvo!');
 }
 function hexToRgb(hex){const r=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);return r?{r:parseInt(r[1],16),g:parseInt(r[2],16),b:parseInt(r[3],16)}:{r:0,g:212,b:170};}
 function histCarregarMais() {
-    if (_histPaginacao.temMais && !_histPaginacao.carregando) {
-        buscarHistPeriodo(_histPaginacao.paginaAtual + 1, true);
+    const btn = document.getElementById('btn-hist-carregar-mais');
+    if (btn) {
+        btn.textContent = '⏳ Carregando...';
+        btn.disabled = true;
+    }
+    
+    // Pega os próximos 100 registros a partir do tamanho atual de DB.historico
+    const atuais = DB.historico.length;
+    const proximos = _histCompleto.slice(atuais, atuais + 100);
+    
+    if (proximos.length > 0) {
+        // Adiciona os novos registros à lista visível instantaneamente (sem consulta ao banco)
+        DB.historico = DB.historico.concat(proximos);
+        filtrarHist(); // Atualiza a tabela na tela
+        
+        // Se ainda houver mais registros, mantém o botão, senão esconde
+        if (DB.historico.length >= _histCompleto.length) {
+            if (btn) {
+                btn.textContent = '✓ Todos os registros carregados';
+                setTimeout(() => { btn.style.display = 'none'; }, 1500);
+            }
+        } else {
+            if (btn) {
+                btn.textContent = `📥 Carregar Mais (100 registros)`;
+                btn.disabled = false;
+            }
+        }
     }
 }
