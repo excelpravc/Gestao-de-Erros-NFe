@@ -1313,7 +1313,7 @@ onkeydown="acHistFornKey(event)">
 </table>
 
 <!-- BOTÃO CARREGAR MAIS - PAGINAÇÃO -->
-<div id="hist-carregar-mais-wrap" style="text-align:center;padding:20px;display:none;">
+<div id="hist-carregar-mais-wrap" style="text-align:center;padding:20px;display:none;position:relative;z-index:5;pointer-events:auto;">
     <button id="btn-hist-carregar-mais" 
             onclick="histCarregarMais()" 
             style="background:var(--accent,#00d4aa);
@@ -1326,7 +1326,10 @@ onkeydown="acHistFornKey(event)">
                    font-weight:700;
                    cursor:pointer;
                    transition:all .2s;
-                   box-shadow:0 4px 12px #00d4aa30;">
+                   box-shadow:0 4px 12px #00d4aa30;
+                   position:relative;
+                   z-index:6;
+                   pointer-events:auto;">
          Carregar Mais (100 registros)
     </button>
 </div>
