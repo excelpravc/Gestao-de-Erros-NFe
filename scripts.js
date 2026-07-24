@@ -110,6 +110,17 @@ document.head.appendChild(fixMenu);
 // ─ ESTADO GLOBAL ──
 let DB={compradores:[],comerciais:[],lojas:[],manifestos:[],codErros:[],fornecedores:[],historico:[],regras:[],justificativas:[],gruposLoja:[]};
 let cfg={nome:'',tel:'',cargo:''};
+
+// ════════════════════════════════════════════════════════════════
+//  PAGINAÇÃO DO HISTÓRICO
+// ════════════════════════════════════════════════════════════════
+let _histPaginacao = {
+    paginaAtual: 1,
+    limite: 100,
+    totalRegistros: 0,
+    ultimoDocumento: null,
+    carregando: false
+};
 let emailCfg={saudacao:true,intro:true,separadores:true,fornecedor:true,nota:true,descricao:true,status:true,cobranca:false,assinatura:true};
 let cobrancaTexto='Assim que for corrigido, favor responder este e-mail.';
 let formCfg = { comp: true, comerc: false, loja: true, manif: false, out_para: true, out_cc: true, out_assunto: true, out_corpo: true };
@@ -3971,3 +3982,8 @@ toast('✓ Grupo salvo!');
 .saveGrupoLoja({ id, grupo: nome, lojas: lojasMarcadas });
 }
 function hexToRgb(hex){const r=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);return r?{r:parseInt(r[1],16),g:parseInt(r[2],16),b:parseInt(r[3],16)}:{r:0,g:212,b:170};}
+function histCarregarMais() {
+    if (_histPaginacao.temMais && !_histPaginacao.carregando) {
+        buscarHistPeriodo(_histPaginacao.paginaAtual + 1, true);
+    }
+}
