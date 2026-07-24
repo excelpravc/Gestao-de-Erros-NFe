@@ -110,6 +110,7 @@ document.head.appendChild(fixMenu);
 // ─ ESTADO GLOBAL ──
 let DB={compradores:[],comerciais:[],lojas:[],manifestos:[],codErros:[],fornecedores:[],historico:[],regras:[],justificativas:[],gruposLoja:[]};
 let cfg={nome:'',tel:'',cargo:''};
+let _histCompleto = []; // Guarda TODOS os registros para paginação
 
 // ════════════════════════════════════════════════════════════════
 //  PAGINAÇÃO DO HISTÓRICO
@@ -2669,15 +2670,17 @@ function buscarHistPeriodo() {
     if (lbl) lbl.textContent = '⏳ Buscando na base de dados...';
     if (tb)  tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);font-style:italic">Consultando Sistema...</td></tr>';
     google.script.run
-    .withSuccessHandler(function(lista) {
+        .withSuccessHandler(function(lista) {
         // ⚠️ AQUI ESTÁ A MUDANÇA: pegamos apenas os primeiros 100 registros
         const listaLimitada = (lista || []).slice(0, 100);
         DB.historico = listaLimitada;
         _histCarregado = true;
         filtrarHist();
         gerarDash();
+        
         const fmtD = v => { const p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
         if (lbl) lbl.textContent = listaLimitada.length + ' de ' + (lista||[]).length + ' registro(s) · ' + fmtD(de) + ' → ' + fmtD(ate);
+        
         const hoje = new Date(); hoje.setHours(0,0,0,0);
         let vencidas = [], proximas = [];
         (listaLimitada||[]).forEach(function(r) {
@@ -2693,6 +2696,7 @@ function buscarHistPeriodo() {
             if (diff < 0) vencidas.push({ danf: r.danf, dias: Math.abs(diff) });
             else if (diff <= 7) proximas.push({ danf: r.danf, dias: diff });
         });
+        
         if (!vencidas.length && !proximas.length) {
             toast('✓ Busca concluída!');
         } else {
@@ -2709,6 +2713,16 @@ function buscarHistPeriodo() {
             }
             toast('⚠ ' + partes.join('  ·  '), true, 5000);
             setTimeout(function() { mostrarAlertasVencimento(listaLimitada || []); }, 300);
+        }
+
+        // 🎯 LÓGICA DO BOTÃO "CARREGAR MAIS"
+        const btnMais = document.getElementById('btn-hist-carregar-mais');
+        if (btnMais) {
+            if ((lista || []).length > 100) {
+                btnMais.style.display = 'block';
+            } else {
+                btnMais.style.display = 'none';
+            }
         }
     })
     .withFailureHandler(function(e) {
