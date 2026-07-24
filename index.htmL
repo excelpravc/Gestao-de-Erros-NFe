@@ -1311,6 +1311,27 @@ onkeydown="acHistFornKey(event)">
 </thead>
 <tbody id="tb-hist"></tbody>
 </table>
+
+<!-- BOTÃO CARREGAR MAIS - PAGINAÇÃO -->
+<div id="hist-carregar-mais-wrap" style="text-align:center;padding:20px;display:none;">
+    <button id="btn-hist-carregar-mais" 
+            onclick="histCarregarMais()" 
+            style="background:var(--accent,#00d4aa);
+                   color:#000;
+                   border:none;
+                   padding:12px 32px;
+                   border-radius:10px;
+                   font-family:'DM Mono',monospace;
+                   font-size:.85rem;
+                   font-weight:700;
+                   cursor:pointer;
+                   transition:all .2s;
+                   box-shadow:0 4px 12px #00d4aa30;">
+         Carregar Mais (100 registros)
+    </button>
+</div>
+<!-- FIM BOTÃO CARREGAR MAIS -->
+
 </div>
 </div>
 </div><!-- /#p-hist -->
