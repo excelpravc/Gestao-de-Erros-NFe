@@ -84,20 +84,12 @@
     const d = new Date();
     return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
   }
-  function _dataBRparaISO(s) {
-    if (!s || typeof s !== 'string') return null;
-    const p = s.trim().split('/');
-    if (p.length === 3 && p[2].length === 4) {
-      return `${p[2]}-${String(p[0]).padStart(2,'0')}-${String(p[1]).padStart(2,'0')}`;
-    }
-    return null;
-  }
   async function addHistorico(data) {
     const payload = Object.assign({}, data);
     if (!payload.data) payload.data = _hojeBR();
-    payload.dataISO = _dataBRparaISO(payload.data) || new Date().toISOString().split('T')[0];
     return _add(_histColl(payload.perfil), payload);
-  }  async function updateHistorico(data) {
+  }
+  async function updateHistorico(data) {
     return _update(_histColl(data && data.perfil), data);
   }
   async function deleteHistorico(id, perfil) {
@@ -115,59 +107,11 @@
     return '1900-01-01';
   }
   async function loadHistFiltrado(de, ate, perfil) {
-    const db = getDb();
-    const coll = _histColl(perfil);
-    const snap = await db.collection(coll)
-      .where('dataISO', '>=', de)
-      .where('dataISO', '<=', ate)
-      .get();
-    return snap.docs.map(d => d.data());
-  }
-
-  // ── Migração única: preenche dataISO nos registros antigos que não têm ──
-  // Rode isso UMA VEZ (ex: cole "await migrarDataISO('Lojas')" no console do
-  // navegador, depois "await migrarDataISO('Matriz')") depois que a cota
-  // resetar. Depois disso não precisa mais rodar.
-  async function migrarDataISO(perfil) {
-    const db = getDb();
-    const coll = _histColl(perfil);
-    const snap = await db.collection(coll).get();
-    const semISO = snap.docs.filter(d => !d.data().dataISO);
-    let corrigidos = 0;
-    const CHUNK = 450;
-    for (let i = 0; i < semISO.length; i += CHUNK) {
-      const batch = db.batch();
-      semISO.slice(i, i + CHUNK).forEach(doc => {
-        const iso = _dataBRparaISO(doc.data().data) || '1900-01-01';
-        batch.update(doc.ref, { dataISO: iso });
-        corrigidos++;
-      });
-      await batch.commit();
-    }
-    console.log(`[Migração] ${corrigidos} registro(s) de ${coll} corrigido(s).`);
-    return { ok: true, corrigidos, total: snap.docs.length };
-  }
-
-  // ── Busca direta por DANF: só traz os documentos que batem (leitura barata) ──
-  async function buscarDanfNoHistorico(danf, perfil) {
-    const db = getDb();
-    const coll = _histColl(perfil);
-    const snap = await db.collection(coll).where('danf', '==', String(danf || '').trim()).get();
-    return snap.docs.map(d => d.data());
-  }
-
-  // ── Carrega só os últimos N registros do histórico, ordenado pela DATA real ──
-  // (não por id — id é ordem de inserção, e um lote importado depois pode ter
-  // id maior mesmo com data mais antiga, escondendo os registros mais recentes)
-  async function loadHistUltimos(perfil, limite, cursorDataISO, cursorId) {
-    const db = getDb();
-    let q = db.collection(_histColl(perfil)).orderBy('dataISO', 'desc').orderBy('id', 'desc');
-    if (cursorDataISO != null && cursorId != null) {
-      q = q.startAfter(cursorDataISO, Number(cursorId));
-    }
-    q = q.limit(Number(limite) || 100);
-    const snap = await q.get();
-    return snap.docs.map(d => d.data());
+    const rows = await _loadColl(_histColl(perfil));
+    return rows.filter(r => {
+      const d = _parseDataBR(r.data);
+      return d >= de && d <= ate;
+    });
   }
   async function updateHistoricoSituacaoPorDANF(danf, loja, perfil) {
     const db = getDb();
@@ -316,7 +260,7 @@
         _loadColl(COLLECTIONS.manifesto),
         _loadColl(_codErrosColl(perfil)),
         _loadColl(COLLECTIONS.fornecedor),
-        loadHistUltimos(perfil, 100), // só os 100 mais recentes — evita ler a coleção inteira em todo login
+        _loadColl(_histColl(perfil)),
         _loadColl(COLLECTIONS.regra),
         _loadColl(COLLECTIONS.justificativa),
         _loadColl(COLLECTIONS.grupoLoja)
@@ -328,8 +272,6 @@
   const HANDLERS = {
     loadAll,
     loadHistFiltrado,
-    loadHistUltimos,
-    buscarDanfNoHistorico,
     addHistorico, updateHistorico, deleteHistorico, updateHistoricoSituacaoPorDANF,
     loadAssinatura, saveAssinatura,
     addComprador: (d) => _add(_compradoresColl(d && d.perfil), d),
@@ -357,7 +299,6 @@
     deleteJustificativa: (id) => _delete(COLLECTIONS.justificativa, id),
     saveGrupoLoja,
     deleteGrupoLoja: (id) => _delete(COLLECTIONS.grupoLoja, id),
-    migrarDataISO,
     loadSenhaSistema, saveSenhaSistema,
     loadEmailRecuperacao, saveEmailRecuperacao,
     limparColecao, importarEmMassa
@@ -389,7 +330,6 @@
   }
 
   window.google.script.run = makeProxy();
-  window.migrarDataISO = migrarDataISO; // exposta pra rodar direto no console, uma vez só
 
   console.log('[Polyfill] google.script.run redirecionado para Firestore com sucesso!');
 })();
