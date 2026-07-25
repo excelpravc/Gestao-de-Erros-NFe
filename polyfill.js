@@ -84,10 +84,20 @@
     const d = new Date();
     return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
   }
+  function _dataBRparaISO(s) {
+    if (!s || typeof s !== 'string') return null;
+    const p = s.trim().split('/');
+    if (p.length === 3 && p[2].length === 4) {
+      return `${p[2]}-${String(p[0]).padStart(2,'0')}-${String(p[1]).padStart(2,'0')}`;
+    }
+    return null;
+  }
   async function addHistorico(data) {
     const payload = Object.assign({}, data);
     if (!payload.data) payload.data = _hojeBR();
+    payload.dataISO = _dataBRparaISO(payload.data) || new Date().toISOString().split('T')[0];
     return _add(_histColl(payload.perfil), payload);
+  }
   }
   async function updateHistorico(data) {
     return _update(_histColl(data && data.perfil), data);
