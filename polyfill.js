@@ -388,6 +388,7 @@
   }
 
   window.google.script.run = makeProxy();
+  window.migrarDataISO = migrarDataISO; // exposta pra rodar direto no console, uma vez só
 
   console.log('[Polyfill] google.script.run redirecionado para Firestore com sucesso!');
 })();
