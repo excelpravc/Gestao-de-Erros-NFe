@@ -146,15 +146,7 @@ DB.codErros=d.codErros||[];DB.fornecedores=d.fornecedores||[];
 DB.historico=d.historico||[];DB.regras=d.regras||[];
 DB.justificativas=d.justificativas||[];
 DB.gruposLoja=d.gruposLoja||[];
-// Cache PERMANENTE do histórico completo — nunca é sobrescrito por filtros
-// de data/loja/erro. gerarDash() e buscarHistPeriodo() filtram A PARTIR
-// deste cache em memória, em vez de consultar o Firestore de novo a cada
-// clique (evita reler a coleção inteira repetidamente e estourar a cota).
-window._historicoCacheCompleto = (d.historico||[]).slice();
-function _addLocalHistorico(obj){
-DB.historico.push(obj);
-if (window._historicoCacheCompleto) window._historicoCacheCompleto.push(obj);
-}
+// O histórico já vem limitado aos 100 mais recentes (loadHistUltimos no login).
 _histCompleto = DB.historico.slice();
 _histModoServidor = true;
 const wrapMais = document.getElementById('hist-carregar-mais-wrap');
@@ -250,13 +242,9 @@ if(!de||!ate){toast('Selecione o período!',true);return;}
 const filtroLoja=document.getElementById('dash-loja')?document.getElementById('dash-loja').value:'';
 const filtroErro=document.getElementById('dash-erro')?document.getElementById('dash-erro').value:'';
 const filtroStatus=document.getElementById('dash-status')?document.getElementById('dash-status').value:'';
-// Filtra a partir do cache em memória (já carregado no login) — não
-// consulta o Firestore de novo a cada clique em "Dashboard".
-const fonte = window._historicoCacheCompleto || DB.historico || [];
-const hist = fonte.filter(r=>{
-const d = parseDataBR(r.data);
-return d >= de && d <= ate;
-});
+toast('⏳ Buscando dados do período...');
+google.script.run
+.withSuccessHandler(function(hist){
 if(!hist||!hist.length){
 DB.historico = [];
 ['kpi-tot','kpi-forn','kpi-errt','kpi-loja'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='0';});
@@ -296,6 +284,9 @@ renderRankings(registros);
 renderChartStatus(registros);
 renderDetTable(registros);
 toast('✓ Dashboard gerado!');
+})
+.withFailureHandler(function(e){ toast('Erro ao buscar dados: '+e.message,true); })
+.loadHistFiltrado(de, ate, _perfilAtivo());
 }
 // ════════════════════════════════════════════════════════════════
 //  FUNÇÕES DE GRÁFICO — despacham para o perfil ativo quando
@@ -2364,7 +2355,7 @@ google.script.run
 .withSuccessHandler(res => {
 if (res.ok) {
 const hoje = new Date().toLocaleDateString('pt-BR');
-_addLocalHistorico(Object.assign({},novaOc,{id:res.id,data:hoje}));
+DB.historico.push(Object.assign({},novaOc,{id:res.id,data:hoje}));
 toast(`✓ Copiado! NF ${danf} registrada para "${lojaDestino}" como LANÇADA!`);
 filtrarHist(); gerarDash();
 } else { toast('✓ Copiado! (falha ao registrar S/ERRO)',true); }
@@ -2505,7 +2496,7 @@ try {
 await new Promise((resolve, reject) => {
 google.script.run
 .withSuccessHandler(r => {
-if(r.ok) { const hoje = new Date().toLocaleDateString('pt-BR'); _addLocalHistorico(Object.assign({}, data, {id: r.id, data: hoje})); salvos++; resolve(); }
+if(r.ok) { const hoje = new Date().toLocaleDateString('pt-BR'); DB.historico.push(Object.assign({}, data, {id: r.id, data: hoje})); salvos++; resolve(); }
 else reject(new Error('Erro no retorno do servidor'));
 })
 .withFailureHandler(reject)
@@ -2686,29 +2677,23 @@ function buscarHistPeriodo() {
     const tb  = document.getElementById('tb-hist');
     if (lbl) lbl.textContent = '⏳ Buscando na base de dados...';
     if (tb)  tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);font-style:italic">Consultando Sistema...</td></tr>';
-
-    // Filtra a partir do cache em memória (já carregado no login) — não
-    // consulta o Firestore de novo a cada "Hoje"/"7 dias"/"Buscar".
-    setTimeout(function() {
-        const fonte = window._historicoCacheCompleto || DB.historico || [];
-        const lista = fonte.filter(function(r) {
-            const d = parseDataBR(r.data);
-            return d >= de && d <= ate;
-        });
+    
+    google.script.run
+    .withSuccessHandler(function(lista) {
         // 1. Guarda TODOS os registros do período na memória para paginação frontend
         _histCompleto = lista || [];
         _histModoServidor = false; // período já baixado por completo — "Carregar Mais" pagina local
-
+        
         // 2. Mostra apenas os primeiros 100 na tela inicialmente
         DB.historico = _histCompleto.slice(0, 100);
-
+        
         _histCarregado = true;
         filtrarHist();
         gerarDash();
-
+        
         const fmtD = v => { const p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
         if (lbl) lbl.textContent = DB.historico.length + ' de ' + _histCompleto.length + ' registro(s) · ' + fmtD(de) + ' → ' + fmtD(ate);
-
+        
         const hoje = new Date(); hoje.setHours(0,0,0,0);
         let vencidas = [], proximas = [];
         (DB.historico||[]).forEach(function(r) {
@@ -2724,7 +2709,7 @@ function buscarHistPeriodo() {
             if (diff < 0) vencidas.push({ danf: r.danf, dias: Math.abs(diff) });
             else if (diff <= 7) proximas.push({ danf: r.danf, dias: diff });
         });
-
+        
         if (!vencidas.length && !proximas.length) {
             toast('✓ Busca concluída!');
         } else {
@@ -2742,7 +2727,7 @@ function buscarHistPeriodo() {
             toast('⚠ ' + partes.join('  ·  '), true, 5000);
             setTimeout(function() { mostrarAlertasVencimento(DB.historico || []); }, 300);
         }
-
+        
         // 3. Lógica do botão "Carregar Mais" — precisa mostrar o WRAP, não só o botão
         // (o wrap nasce com display:none no HTML; mostrar só o filho não resolve)
         const wrapMais = document.getElementById('hist-carregar-mais-wrap');
@@ -2753,7 +2738,12 @@ function buscarHistPeriodo() {
         } else if (wrapMais) {
             wrapMais.style.display = 'none';
         }
-    }, 0);
+    })
+    .withFailureHandler(function(e) {
+        if (lbl) lbl.textContent = 'Erro ao carregar';
+        toast('Falha: ' + e.message, true);
+    })
+    .loadHistFiltrado(de, ate, _perfilAtivo());
 }
 function filtrarHist() {
 const fNf     = (document.getElementById('hist-f-nf')?.value     || '').trim().toLowerCase();
@@ -2954,14 +2944,24 @@ toast('✓ PDF gerado com sucesso!');
 // ── EDITAR HISTÓRICO ──
 function openEditHist(id){
 const item = DB.historico.find(x => Number(x.id) === Number(id));
-if(item){ _abrirModalHist(item); return; }
-// Não está nas primeiras 100 linhas exibidas — procura no cache completo
-// em memória (já carregado no login), sem consultar o Firestore de novo
-// e SEM sobrescrever a tabela que está sendo exibida na tela.
-const fonte = window._historicoCacheCompleto || [];
-const found = fonte.find(x => Number(x.id) === Number(id));
+if(!item){
+toast('⏳ Carregando...');
+google.script.run
+.withSuccessHandler(function(lista){
+DB.historico = lista || [];
+const found = DB.historico.find(x => Number(x.id) === Number(id));
 if(!found){ toast('Registro não encontrado!', true); return; }
 _abrirModalHist(found);
+})
+.withFailureHandler(function(e){ toast('Erro: ' + e.message, true); })
+.loadHistFiltrado(
+document.getElementById('hist-de').value,
+document.getElementById('hist-ate').value,
+_perfilAtivo()
+);
+return;
+}
+_abrirModalHist(item);
 }
 function _abrirModalHist(item){
 const id = item.id;
