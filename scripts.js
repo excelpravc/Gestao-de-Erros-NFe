@@ -4030,7 +4030,7 @@ function histCarregarMais() {
     }
 
     // Modo servidor: não há cópia local além do que já foi mostrado — busca a próxima página no Firestore
-    const ultimoId = DB.historico.length ? DB.historico[DB.historico.length - 1].id : null;
+    const ultimoReg = DB.historico.length ? DB.historico[DB.historico.length - 1] : null;
     google.script.run
     .withSuccessHandler(function(proximos) {
         proximos = proximos || [];
@@ -4049,5 +4049,5 @@ function histCarregarMais() {
         if (btn) { btn.textContent = '📥 Carregar Mais (100 registros)'; btn.disabled = false; }
         toast('Falha ao carregar mais registros: ' + e.message, true);
     })
-    .loadHistUltimos(_perfilAtivo(), 100, ultimoId);
+    .loadHistUltimos(_perfilAtivo(), 100, ultimoReg ? ultimoReg.dataISO : null, ultimoReg ? ultimoReg.id : null);
 }
