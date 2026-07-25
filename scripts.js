@@ -2341,7 +2341,7 @@ if (String(row.danf).trim()===String(danf).trim() &&
 row.situacao='Lançada';
 });
 toast(`✓ Copiado! NF ${danf} em "${lojaDestino}" — ${r2.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
-setTimeout(()=>{ buscarHistPeriodo(); gerarDash(); }, 500);
+filtrarHist(); gerarDash();
 } else { toast('✓ Copiado! (falha ao marcar como lançada)', true); }
 })
 .withFailureHandler(()=>toast('✓ Copiado! (falha ao marcar como lançada)',true))
@@ -2357,7 +2357,7 @@ if (res.ok) {
 const hoje = new Date().toLocaleDateString('pt-BR');
 DB.historico.push(Object.assign({},novaOc,{id:res.id,data:hoje}));
 toast(`✓ Copiado! NF ${danf} registrada para "${lojaDestino}" como LANÇADA!`);
-setTimeout(()=>{ buscarHistPeriodo(); gerarDash(); }, 500);
+filtrarHist(); gerarDash();
 } else { toast('✓ Copiado! (falha ao registrar S/ERRO)',true); }
 })
 .withFailureHandler(()=>toast('✓ Copiado! (falha ao registrar S/ERRO)',true))
