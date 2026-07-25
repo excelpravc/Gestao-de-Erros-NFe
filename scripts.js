@@ -110,8 +110,7 @@ document.head.appendChild(fixMenu);
 // ─ ESTADO GLOBAL ──
 let DB={compradores:[],comerciais:[],lojas:[],manifestos:[],codErros:[],fornecedores:[],historico:[],regras:[],justificativas:[],gruposLoja:[]};
 let cfg={nome:'',tel:'',cargo:''};
-let _histCompleto = []; // Guarda os registros já baixados na tela (memória local)
-let _histModoServidor = true; // true = "Carregar Mais" busca a próxima página no servidor; false = período já foi baixado por completo, pagina local
+let _histCompleto = []; // Guarda TODOS os registros na memória para paginação
 
 // ════════════════════════════════════════════════════════════════
 //  PAGINAÇÃO DO HISTÓRICO
@@ -146,13 +145,6 @@ DB.codErros=d.codErros||[];DB.fornecedores=d.fornecedores||[];
 DB.historico=d.historico||[];DB.regras=d.regras||[];
 DB.justificativas=d.justificativas||[];
 DB.gruposLoja=d.gruposLoja||[];
-// O histórico já vem limitado aos 100 mais recentes (loadHistUltimos no login).
-_histCompleto = DB.historico.slice();
-_histModoServidor = true;
-const wrapMais = document.getElementById('hist-carregar-mais-wrap');
-const btnMais  = document.getElementById('btn-hist-carregar-mais');
-if (wrapMais) wrapMais.style.display = DB.historico.length >= 100 ? 'block' : 'none';
-if (btnMais)  { btnMais.style.display = ''; btnMais.disabled = false; btnMais.textContent = '📥 Carregar Mais (100 registros)'; }
 applyLojaFixa();
 if(d.assinatura) applyCfgFromSheet(d.assinatura);
 buildSelects(); popHistFiltros(); renderAll(); renderDash(); renderRegrasEditor();
@@ -1903,7 +1895,7 @@ status: statusAtual,
 loja:   lojaAtual,
 });
 })
-.buscarDanfNoHistorico(danf, _perfilAtivo());
+.loadHistFiltrado('2000-01-01', new Date().toISOString().split('T')[0], _perfilAtivo());
 return;
 }
 _executarCpJust(btn, txt, danf, lojaAtual);
@@ -2287,7 +2279,7 @@ if (!conflitos.length) { onConfirmado(); return; }
 toast('⚠️ Busca offline: verificando apenas registros em memória.', true);
 onConfirmado();
 })
-.buscarDanfNoHistorico(danfVal, _perfilAtivo());
+.loadHistFiltrado('2000-01-01', new Date().toISOString().split('T')[0], _perfilAtivo());
 }
 const justSel  = document.getElementById('sel_just');
 const justOpt  = justSel ? justSel.options[justSel.selectedIndex] : null;
@@ -2341,7 +2333,7 @@ if (String(row.danf).trim()===String(danf).trim() &&
 row.situacao='Lançada';
 });
 toast(`✓ Copiado! NF ${danf} em "${lojaDestino}" — ${r2.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
-filtrarHist(); gerarDash();
+setTimeout(()=>{ buscarHistPeriodo(); gerarDash(); }, 500);
 } else { toast('✓ Copiado! (falha ao marcar como lançada)', true); }
 })
 .withFailureHandler(()=>toast('✓ Copiado! (falha ao marcar como lançada)',true))
@@ -2357,7 +2349,7 @@ if (res.ok) {
 const hoje = new Date().toLocaleDateString('pt-BR');
 DB.historico.push(Object.assign({},novaOc,{id:res.id,data:hoje}));
 toast(`✓ Copiado! NF ${danf} registrada para "${lojaDestino}" como LANÇADA!`);
-filtrarHist(); gerarDash();
+setTimeout(()=>{ buscarHistPeriodo(); gerarDash(); }, 500);
 } else { toast('✓ Copiado! (falha ao registrar S/ERRO)',true); }
 })
 .withFailureHandler(()=>toast('✓ Copiado! (falha ao registrar S/ERRO)',true))
@@ -2680,9 +2672,8 @@ function buscarHistPeriodo() {
     
     google.script.run
     .withSuccessHandler(function(lista) {
-        // 1. Guarda TODOS os registros do período na memória para paginação frontend
+        // 1. Guarda TODOS os registros na memória para paginação frontend
         _histCompleto = lista || [];
-        _histModoServidor = false; // período já baixado por completo — "Carregar Mais" pagina local
         
         // 2. Mostra apenas os primeiros 100 na tela inicialmente
         DB.historico = _histCompleto.slice(0, 100);
@@ -2728,15 +2719,14 @@ function buscarHistPeriodo() {
             setTimeout(function() { mostrarAlertasVencimento(DB.historico || []); }, 300);
         }
         
-        // 3. Lógica do botão "Carregar Mais" — precisa mostrar o WRAP, não só o botão
-        // (o wrap nasce com display:none no HTML; mostrar só o filho não resolve)
-        const wrapMais = document.getElementById('hist-carregar-mais-wrap');
-        const btnMais  = document.getElementById('btn-hist-carregar-mais');
-        if (_histCompleto.length > 100) {
-            if (wrapMais) wrapMais.style.display = 'block';
-            if (btnMais)  { btnMais.style.display = ''; btnMais.disabled = false; btnMais.textContent = '📥 Carregar Mais (100 registros)'; }
-        } else if (wrapMais) {
-            wrapMais.style.display = 'none';
+        // 3. Lógica do botão "Carregar Mais"
+        const btnMais = document.getElementById('btn-hist-carregar-mais');
+        if (btnMais) {
+            if (_histCompleto.length > 100) {
+                btnMais.style.display = 'block';
+            } else {
+                btnMais.style.display = 'none';
+            }
         }
     })
     .withFailureHandler(function(e) {
@@ -4014,40 +4004,31 @@ toast('✓ Grupo salvo!');
 function hexToRgb(hex){const r=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);return r?{r:parseInt(r[1],16),g:parseInt(r[2],16),b:parseInt(r[3],16)}:{r:0,g:212,b:170};}
 function histCarregarMais() {
     const btn = document.getElementById('btn-hist-carregar-mais');
-    if (btn) { btn.textContent = '⏳ Carregando...'; btn.disabled = true; }
-
-    if (!_histModoServidor) {
-        // Modo período: o histórico do período já foi baixado inteiro — pagina local, sem nova leitura
-        const atuais = DB.historico.length;
-        const proximos = _histCompleto.slice(atuais, atuais + 100);
-        if (proximos.length > 0) { DB.historico = DB.historico.concat(proximos); filtrarHist(); }
-        if (DB.historico.length >= _histCompleto.length) {
-            if (btn) { btn.textContent = '✓ Todos os registros carregados'; setTimeout(() => { btn.style.display = 'none'; }, 1500); }
-        } else if (btn) {
-            btn.textContent = '📥 Carregar Mais (100 registros)'; btn.disabled = false;
-        }
-        return;
+    if (btn) {
+        btn.textContent = '⏳ Carregando...';
+        btn.disabled = true;
     }
-
-    // Modo servidor: não há cópia local além do que já foi mostrado — busca a próxima página no Firestore
-    const ultimoReg = DB.historico.length ? DB.historico[DB.historico.length - 1] : null;
-    google.script.run
-    .withSuccessHandler(function(proximos) {
-        proximos = proximos || [];
-        if (proximos.length > 0) {
-            DB.historico = DB.historico.concat(proximos);
-            _histCompleto = DB.historico.slice();
-            filtrarHist();
+    
+    // Pega os próximos 100 registros a partir do tamanho atual de DB.historico
+    const atuais = DB.historico.length;
+    const proximos = _histCompleto.slice(atuais, atuais + 100);
+    
+    if (proximos.length > 0) {
+        // Adiciona os novos registros à lista visível instantaneamente (sem consulta ao banco)
+        DB.historico = DB.historico.concat(proximos);
+        filtrarHist(); // Atualiza a tabela na tela
+        
+        // Se ainda houver mais registros, mantém o botão, senão esconde
+        if (DB.historico.length >= _histCompleto.length) {
+            if (btn) {
+                btn.textContent = '✓ Todos os registros carregados';
+                setTimeout(() => { btn.style.display = 'none'; }, 1500);
+            }
+        } else {
+            if (btn) {
+                btn.textContent = `📥 Carregar Mais (100 registros)`;
+                btn.disabled = false;
+            }
         }
-        if (proximos.length < 100) {
-            if (btn) { btn.textContent = '✓ Todos os registros carregados'; setTimeout(() => { btn.style.display = 'none'; }, 1500); }
-        } else if (btn) {
-            btn.textContent = '📥 Carregar Mais (100 registros)'; btn.disabled = false;
-        }
-    })
-    .withFailureHandler(function(e) {
-        if (btn) { btn.textContent = '📥 Carregar Mais (100 registros)'; btn.disabled = false; }
-        toast('Falha ao carregar mais registros: ' + e.message, true);
-    })
-    .loadHistUltimos(_perfilAtivo(), 100, ultimoReg ? ultimoReg.dataISO : null, ultimoReg ? ultimoReg.id : null);
+    }
 }
