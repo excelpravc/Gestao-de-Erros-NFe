@@ -113,6 +113,27 @@
       return d >= de && d <= ate;
     });
   }
+
+  // ── Busca direta por DANF: só traz os documentos que batem (leitura barata) ──
+  async function buscarDanfNoHistorico(danf, perfil) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    const snap = await db.collection(coll).where('danf', '==', String(danf || '').trim()).get();
+    return snap.docs.map(d => d.data());
+  }
+
+  // ── Carrega só os últimos N registros do histórico, ordenado por id ──
+  // (evita ler a coleção inteira; usado no login e no "Carregar Mais")
+  async function loadHistUltimos(perfil, limite, cursorId) {
+    const db = getDb();
+    let q = db.collection(_histColl(perfil)).orderBy('id', 'desc');
+    if (cursorId) q = q.where('id', '<', Number(cursorId));
+    q = q.limit(Number(limite) || 100);
+    const snap = await q.get();
+    const rows = snap.docs.map(d => d.data());
+    rows.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+    return rows;
+  }
   async function updateHistoricoSituacaoPorDANF(danf, loja, perfil) {
     const db = getDb();
     const coll = _histColl(perfil);
@@ -260,7 +281,7 @@
         _loadColl(COLLECTIONS.manifesto),
         _loadColl(_codErrosColl(perfil)),
         _loadColl(COLLECTIONS.fornecedor),
-        _loadColl(_histColl(perfil)),
+        loadHistUltimos(perfil, 100), // só os 100 mais recentes — evita ler a coleção inteira em todo login
         _loadColl(COLLECTIONS.regra),
         _loadColl(COLLECTIONS.justificativa),
         _loadColl(COLLECTIONS.grupoLoja)
@@ -272,6 +293,8 @@
   const HANDLERS = {
     loadAll,
     loadHistFiltrado,
+    loadHistUltimos,
+    buscarDanfNoHistorico,
     addHistorico, updateHistorico, deleteHistorico, updateHistoricoSituacaoPorDANF,
     loadAssinatura, saveAssinatura,
     addComprador: (d) => _add(_compradoresColl(d && d.perfil), d),
