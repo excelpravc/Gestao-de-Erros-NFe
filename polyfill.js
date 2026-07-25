@@ -156,17 +156,18 @@
     return snap.docs.map(d => d.data());
   }
 
-  // ── Carrega só os últimos N registros do histórico, ordenado por id ──
-  // (evita ler a coleção inteira; usado no login e no "Carregar Mais")
-  async function loadHistUltimos(perfil, limite, cursorId) {
+  // ── Carrega só os últimos N registros do histórico, ordenado pela DATA real ──
+  // (não por id — id é ordem de inserção, e um lote importado depois pode ter
+  // id maior mesmo com data mais antiga, escondendo os registros mais recentes)
+  async function loadHistUltimos(perfil, limite, cursorDataISO, cursorId) {
     const db = getDb();
-    let q = db.collection(_histColl(perfil)).orderBy('id', 'desc');
-    if (cursorId) q = q.where('id', '<', Number(cursorId));
+    let q = db.collection(_histColl(perfil)).orderBy('dataISO', 'desc').orderBy('id', 'desc');
+    if (cursorDataISO != null && cursorId != null) {
+      q = q.startAfter(cursorDataISO, Number(cursorId));
+    }
     q = q.limit(Number(limite) || 100);
     const snap = await q.get();
-    const rows = snap.docs.map(d => d.data());
-    rows.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
-    return rows;
+    return snap.docs.map(d => d.data());
   }
   async function updateHistoricoSituacaoPorDANF(danf, loja, perfil) {
     const db = getDb();
