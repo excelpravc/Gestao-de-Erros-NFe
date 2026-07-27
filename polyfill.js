@@ -116,15 +116,11 @@
     return '1900-01-01';
   }
   async function loadHistFiltrado(de, ate, perfil) {
-    const db = getDb();
-    const coll = _histColl(perfil);
-    const snap = await db.collection(coll)
-      .where('dataISO', '>=', de)
-      .where('dataISO', '<=', ate)
-      .get();
-    const rows = snap.docs.map(d => d.data());
-    rows.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
-    return rows;
+    const rows = await _loadColl(_histColl(perfil));
+    return rows.filter(r => {
+      const d = _parseDataBR(r.data);
+      return d >= de && d <= ate;
+    });
   }
 
   // ── Busca direta por DANF: só traz os documentos que batem (leitura barata) ──
