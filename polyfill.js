@@ -1,8 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 //  POLYFILL — Intercepta google.script.run e redireciona para o
-//  Firestore (substitui totalmente o backend /api do Next.js).
-//  Precisa carregar DEPOIS de: firebase-app-compat, firebase-firestore-compat,
-//  firebase-init.js (que expõe window.db).
+//  Firestore. Precisa carregar DEPOIS de: firebase-app-compat,
+//  firebase-firestore-compat, firebase-init.js (que expõe window.dbTenant).
 // ════════════════════════════════════════════════════════════════
 
 (function () {
@@ -14,7 +13,6 @@
     return window.dbTenant;
   }
 
-  // ── Coleções simples (mesma lista para os dois perfis) ──
   const COLLECTIONS = {
     comprador: 'compradores',
     comercial: 'comerciais',
@@ -37,7 +35,6 @@
     return (String(perfil || '').toLowerCase() === 'matriz') ? 'Cod_Erros_Matriz' : 'Cod_Erros_Lojas';
   }
 
-  // ── Gera próximo ID numérico (equivalente ao auto-incremento das planilhas) ──
   async function _nextId(collName) {
     const db = getDb();
     const ref = db.collection('_counters').doc(collName);
@@ -84,32 +81,6 @@
     const d = new Date();
     return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
   }
-  function _dataBRparaISO(s) {
-    if (!s || typeof s !== 'string') return null;
-    const p = s.trim().split('/');
-    if (p.length === 3 && p[2].length === 4) {
-      return `${p[2]}-${String(p[0]).padStart(2,'0')}-${String(p[1]).padStart(2,'0')}`;
-    }
-    return null;
-  }
-  async function addHistorico(data) {
-    const payload = Object.assign({}, data);
-    if (!payload.data) payload.data = _hojeBR();
-    payload.dataISO = _dataBRparaISO(payload.data) || new Date().toISOString().split('T')[0];
-    const r = await _add(_histColl(payload.perfil), payload);
-    _histCacheClear();
-    return r;
-  }
-  async function updateHistorico(data) {
-    const r = await _update(_histColl(data && data.perfil), data);
-    _histCacheClear();
-    return r;
-  }
-  async function deleteHistorico(id, perfil) {
-    const r = await _delete(_histColl(perfil), id);
-    _histCacheClear();
-    return r;
-  }
   function _parseDataBR(s) {
     if (!s || typeof s !== 'string') return '1900-01-01';
     const p = s.trim().split('/');
@@ -121,54 +92,61 @@
     }
     return '1900-01-01';
   }
-  // ── Cache em memória do histórico por período ──
-  // Reaproveita o resultado já baixado quando a mesma consulta é pedida
-  // de novo (Dashboard e Histórico com o mesmo período, re-clique em
-  // "Buscar", troca de aba). Expira em 60s para nunca mostrar dado velho
-  // depois de uma edição — e é limpo na hora quando algo é gravado.
-  const _histCache = new Map();
-  const HIST_CACHE_TTL_MS = 60000;
-  function _histCacheKey(perfil, de, ate) { return perfil + '|' + de + '|' + ate; }
-  function _histCacheGet(key) {
-    const hit = _histCache.get(key);
-    if (!hit) return null;
-    if (Date.now() - hit.t > HIST_CACHE_TTL_MS) { _histCache.delete(key); return null; }
-    return hit.rows;
+
+  // ── Cache do histórico inteiro em memória, por perfil ──
+  // Só relê a coleção do Firestore quando a "versão" (documento em _meta)
+  // mudar — ou seja, quando alguém realmente grava/edita/apaga um registro.
+  // Enquanto ninguém escreve nada, qualquer troca de período, de aba, ou
+  // re-clique em "Buscar" reaproveita o que já está em memória.
+  const _histFull = new Map(); // perfilKey -> { rows, versao }
+  function _perfilKey(perfil) { return String(perfil || '').toLowerCase() === 'matriz' ? 'matriz' : 'lojas'; }
+  function _metaDocId(perfil) { return 'historico_' + _perfilKey(perfil); }
+
+  async function _bumpHistVersao(perfil) {
+    const db = getDb();
+    const ref = db.collection('_meta').doc(_metaDocId(perfil));
+    await ref.set({ versao: firebase.firestore.FieldValue.increment(1) }, { merge: true });
   }
-  function _histCacheSet(key, rows) { _histCache.set(key, { rows, t: Date.now() }); }
-  function _histCacheClear() { _histCache.clear(); }
+
+  async function addHistorico(data) {
+    const payload = Object.assign({}, data);
+    if (!payload.data) payload.data = _hojeBR();
+    const r = await _add(_histColl(payload.perfil), payload);
+    await _bumpHistVersao(payload.perfil);
+    return r;
+  }
+  async function updateHistorico(data) {
+    const r = await _update(_histColl(data && data.perfil), data);
+    await _bumpHistVersao(data && data.perfil);
+    return r;
+  }
+  async function deleteHistorico(id, perfil) {
+    const r = await _delete(_histColl(perfil), id);
+    await _bumpHistVersao(perfil);
+    return r;
+  }
 
   async function loadHistFiltrado(de, ate, perfil) {
-    const cacheKey = _histCacheKey(perfil, de, ate);
-    const cached = _histCacheGet(cacheKey);
-    if (cached) return cached; // reaproveitado — 0 leituras no Firestore
-
     const db = getDb();
-    const coll = _histColl(perfil);
+    const perfilKey = _perfilKey(perfil);
 
-    // Consulta só os documentos do período (campo dataISO, já existente
-    // nos seus documentos), em vez de ler a coleção inteira. Um teto de
-    // segurança evita que um período gigantesco leia demais de uma vez.
-    const LIMITE_SEGURANCA = 6000;
-    const snap = await db.collection(coll)
-      .where('dataISO', '>=', de)
-      .where('dataISO', '<=', ate)
-      .orderBy('dataISO', 'desc')
-      .limit(LIMITE_SEGURANCA + 1)
-      .get();
+    // 1 leitura barata: só confere se algo mudou desde o último carregamento
+    const metaSnap = await db.collection('_meta').doc(_metaDocId(perfil)).get();
+    const versaoAtual = metaSnap.exists ? (metaSnap.data().versao || 0) : 0;
 
-    if (snap.docs.length > LIMITE_SEGURANCA) {
-      const err = new Error(
-        'Este período tem mais de ' + LIMITE_SEGURANCA + ' registro(s) — reduza o ' +
-        'intervalo de datas para não gastar a cota gratuita de uma vez.'
-      );
-      err.code = 'periodo-grande-demais';
-      throw err;
+    const cache = _histFull.get(perfilKey);
+    let rows;
+    if (cache && cache.versao === versaoAtual) {
+      rows = cache.rows; // reaproveitado — 0 leituras da coleção
+    } else {
+      rows = await _loadColl(_histColl(perfil)); // lê a coleção 1 vez só
+      _histFull.set(perfilKey, { rows, versao: versaoAtual });
     }
 
-    const rows = snap.docs.map(d => d.data());
-    _histCacheSet(cacheKey, rows);
-    return rows;
+    return rows.filter(r => {
+      const d = _parseDataBR(r.data);
+      return d >= de && d <= ate;
+    });
   }
 
   // ── Busca direta por DANF: só traz os documentos que batem (leitura barata) ──
@@ -180,7 +158,6 @@
   }
 
   // ── Carrega só os últimos N registros do histórico, ordenado por id ──
-  // (evita ler a coleção inteira; usado no login e no "Carregar Mais")
   async function loadHistUltimos(perfil, limite, cursorId) {
     const db = getDb();
     let q = db.collection(_histColl(perfil)).orderBy('id', 'desc');
@@ -191,6 +168,7 @@
     rows.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
     return rows;
   }
+
   async function updateHistoricoSituacaoPorDANF(danf, loja, perfil) {
     const db = getDb();
     const coll = _histColl(perfil);
@@ -202,7 +180,7 @@
       const bate = !loja || String(row.loja || '').trim().toLowerCase() === String(loja).trim().toLowerCase();
       if (bate) { batch.update(doc.ref, { situacao: 'Lançada' }); total++; }
     });
-    if (total > 0) { await batch.commit(); _histCacheClear(); }
+    if (total > 0) { await batch.commit(); await _bumpHistVersao(perfil); }
     return { ok: total > 0, totalMarcadas: total };
   }
 
@@ -231,8 +209,6 @@
     const senhaSalva = snap.exists ? (snap.data().senha || '@mudar') : '@mudar';
     if (String(atual) !== String(senhaSalva)) return { ok: false, msg: 'Senha atual incorreta!' };
     await ref.set({ senha: nova }, { merge: true });
-    // Espelha a senha atualizada no diretório central, pra o ADM sempre
-    // ver a senha em dia sem precisar entrar no banco de cada cliente.
     if (window.dbCentral && window.CURRENT_USUARIO_ID) {
       try {
         await window.dbCentral.collection('usuarios').doc(window.CURRENT_USUARIO_ID)
@@ -280,10 +256,7 @@
     return _update(COLLECTIONS.grupoLoja, data);
   }
 
-  // ── Importação em massa (usada pelo botão "Importar Excel") ──
-  // Reserva um bloco de IDs numa única transação e grava tudo em lotes de
-  // até 450 documentos por chamada de batch, em vez de 1 transação + 1
-  // gravação por linha (o que travava com milhares de registros).
+  // ── Importação em massa ──
   async function importarEmMassa(collName, rows) {
     const db = getDb();
     if (!rows || !rows.length) return { ok: true, importados: 0 };
@@ -296,7 +269,7 @@
       return atual + 1;
     });
 
-    const CHUNK = 450; // limite do Firestore é 500 operações por batch
+    const CHUNK = 450;
     let importados = 0;
     for (let i = 0; i < rows.length; i += CHUNK) {
       const batch = db.batch();
@@ -309,24 +282,29 @@
       await batch.commit();
       importados += parte.length;
     }
-    _histCacheClear();
+
+    if (collName === 'Historico_Lojas') await _bumpHistVersao('Lojas');
+    if (collName === 'Historico_Matriz') await _bumpHistVersao('Matriz');
+
     return { ok: true, importados, idInicial };
   }
 
-  // ── Limpeza em lote de uma coleção inteira (usado pelo botão "Limpar Base") ──
+  // ── Limpeza em lote de uma coleção inteira ──
   async function limparColecao(collName) {
     const db = getDb();
     const snap = await db.collection(collName).get();
     const docs = snap.docs;
-    const CHUNK = 450; // limite do Firestore é 500 operações por batch
+    const CHUNK = 450;
     for (let i = 0; i < docs.length; i += CHUNK) {
       const batch = db.batch();
       docs.slice(i, i + CHUNK).forEach(d => batch.delete(d.ref));
       await batch.commit();
     }
-    // Reseta o contador de ID para essa coleção, para a próxima importação começar do 1
     await db.collection('_counters').doc(collName).delete().catch(() => {});
-    _histCacheClear();
+
+    if (collName === 'Historico_Lojas') await _bumpHistVersao('Lojas');
+    if (collName === 'Historico_Matriz') await _bumpHistVersao('Matriz');
+
     return { ok: true, removidos: docs.length };
   }
 
@@ -340,7 +318,7 @@
         _loadColl(COLLECTIONS.manifesto),
         _loadColl(_codErrosColl(perfil)),
         _loadColl(COLLECTIONS.fornecedor),
-        loadHistUltimos(perfil, 100), // só os 100 mais recentes — evita ler a coleção inteira em todo login
+        loadHistUltimos(perfil, 100),
         _loadColl(COLLECTIONS.regra),
         _loadColl(COLLECTIONS.justificativa),
         _loadColl(COLLECTIONS.grupoLoja)
@@ -348,7 +326,7 @@
     return { compradores, comerciais, lojas, manifestos, codErros, fornecedores, historico, regras, justificativas, gruposLoja };
   }
 
-  // ── Tabela de despacho: nome do método (chamado por google.script.run.X(...)) → handler ──
+  // ── Tabela de despacho ──
   const HANDLERS = {
     loadAll,
     loadHistFiltrado,
@@ -401,11 +379,11 @@
           .catch(err => {
             console.error(`[Polyfill/Firestore] Erro em ${name}:`, err);
             if (err && (err.code === 'resource-exhausted' || /quota/i.test(String(err.message || err)))) {
-              err.message = 'A cota gratuita diária do Firebase foi atingida. Tente novamente mais tarde (ela reseta por volta da meia-noite no horário do Pacífico — geralmente 4h–5h da manhã no horário de Brasília) ou faça upgrade do projeto para o plano Blaze no Console do Firebase.';
+              err.message = 'A cota gratuita diária do Firebase foi atingida. Tente novamente mais tarde ou faça upgrade do projeto para o plano Blaze no Console do Firebase.';
             }
             if (fail) fail(err); else throw err;
           });
-        return makeProxy(); // nova instância limpa para a próxima chamada encadeada
+        return makeProxy();
       };
     });
     return proxy;
