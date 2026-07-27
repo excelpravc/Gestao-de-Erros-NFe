@@ -384,9 +384,37 @@
     deleteGrupoLoja: (id) => _delete(COLLECTIONS.grupoLoja, id),
     loadSenhaSistema, saveSenhaSistema,
     loadEmailRecuperacao, saveEmailRecuperacao,
-    limparColecao, importarEmMassa,
-    backfillDataISO
+   limparColecao, importarEmMassa,
+    backfillDataISO, diagnosticarFormatosData
   };
+
+  // ── DIAGNÓSTICO — só leitura, não grava nada. Roda 1x pra entender
+  // que formatos de data existem de verdade na base antes de corrigir. ──
+  async function diagnosticarFormatosData(perfil) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    const snap = await db.collection(coll).get(); // 1 leitura completa, diagnóstico único
+
+    const contagem = { ddmmyyyy: 0, isoYYYYMMDD: 0, vazio: 0, outro: 0 };
+    const exemplosOutro = [];
+    const exemplosVazio = [];
+
+    snap.forEach(doc => {
+      const v = doc.data().data;
+      if (v === undefined || v === null || String(v).trim() === '') {
+        contagem.vazio++;
+        if (exemplosVazio.length < 5) exemplosVazio.push(doc.id);
+        return;
+      }
+      const s = String(v).trim();
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) { contagem.ddmmyyyy++; return; }
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) { contagem.isoYYYYMMDD++; return; }
+      contagem.outro++;
+      if (exemplosOutro.length < 8) exemplosOutro.push({ id: doc.id, valor: s });
+    });
+
+    return { total: snap.size, contagem, exemplosOutro, exemplosVazio };
+  }
 
   // ── BACKFILL — roda UMA VEZ SÓ, pra gravar dataISO nos 5.000+ registros
   // antigos que não têm o campo (foram importados antes dessa otimização).
