@@ -37,6 +37,22 @@
     return (String(perfil || '').toLowerCase() === 'matriz') ? 'Cod_Erros_Matriz' : 'Cod_Erros_Lojas';
   }
 
+  // ── Cache em memória do histórico por período ──
+  // Evita reler o Firestore quando a mesma consulta é pedida de novo
+  // em sequência (ex: Dashboard e aba Histórico com o mesmo intervalo).
+  // Expira em 60s para não mostrar dado velho depois de uma edição.
+  const _histCache = new Map();
+  const HIST_CACHE_TTL_MS = 60000;
+  function _histCacheKey(perfil, de, ate) { return perfil + '|' + de + '|' + ate; }
+  function _histCacheGet(key) {
+    const hit = _histCache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.t > HIST_CACHE_TTL_MS) { _histCache.delete(key); return null; }
+    return hit.rows;
+  }
+  function _histCacheSet(key, rows) { _histCache.set(key, { rows, t: Date.now() }); }
+  function _histCacheClear() { _histCache.clear(); }
+
   // ── Gera próximo ID numérico (equivalente ao auto-incremento das planilhas) ──
   async function _nextId(collName) {
     const db = getDb();
@@ -121,22 +137,10 @@
     }
     return '1900-01-01';
   }
-  // ── Cache em memória do histórico por período ──
-  // Evita reler o Firestore quando a mesma consulta é pedida de novo
-  // em sequência (ex: Dashboard e aba Histórico com o mesmo intervalo,
-  // ou reabrir a mesma tela). Expira em 60s para não mostrar dado velho.
-  const _histCache = new Map();
-  const HIST_CACHE_TTL_MS = 60000;
-  function _histCacheKey(perfil, de, ate) { return perfil + '|' + de + '|' + ate; }
-  function _histCacheGet(key) {
-    const hit = _histCache.get(key);
-    if (!hit) return null;
-    if (Date.now() - hit.t > HIST_CACHE_TTL_MS) { _histCache.delete(key); return null; }
-    return hit.rows;
-  }
-  function _histCacheSet(key, rows) { _histCache.set(key, { rows, t: Date.now() }); }
-  function _histCacheClear() { _histCache.clear(); }
 
+  // ── Busca por período: consulta direto o Firestore por dataISO,
+  //    com cache e trava de segurança (nunca lê mais do que o limite,
+  //    mesmo que o período pedido seja gigante). ──
   async function loadHistFiltrado(de, ate, perfil) {
     const cacheKey = _histCacheKey(perfil, de, ate);
     const cached = _histCacheGet(cacheKey);
@@ -145,12 +149,7 @@
     const db = getDb();
     const coll = _histColl(perfil);
 
-    // Trava de segurança SEM precisar de .count() (não disponível nesse
-    // ambiente): pede 1 documento a mais que o limite. Se vier o limite+1,
-    // sabemos que o período é grande demais e paramos ali — nunca lemos
-    // mais que LIMITE_SEGURANCA+1 documentos, mesmo que o período real
-    // tenha 5.000+.
-    const LIMITE_SEGURANCA = 3000;
+    const LIMITE_SEGURANCA = 6000; // cobre a base inteira (hoje ~5.400 registros) com folga
     const snap = await db.collection(coll)
       .where('dataISO', '>=', de)
       .where('dataISO', '<=', ate)
@@ -181,7 +180,6 @@
   }
 
   // ── Carrega só os últimos N registros do histórico, ordenado por id ──
-  // (evita ler a coleção inteira; usado no login e no "Carregar Mais")
   async function loadHistUltimos(perfil, limite, cursorId) {
     const db = getDb();
     let q = db.collection(_histColl(perfil)).orderBy('id', 'desc');
@@ -232,8 +230,6 @@
     const senhaSalva = snap.exists ? (snap.data().senha || '@mudar') : '@mudar';
     if (String(atual) !== String(senhaSalva)) return { ok: false, msg: 'Senha atual incorreta!' };
     await ref.set({ senha: nova }, { merge: true });
-    // Espelha a senha atualizada no diretório central, pra o ADM sempre
-    // ver a senha em dia sem precisar entrar no banco de cada cliente.
     if (window.dbCentral && window.CURRENT_USUARIO_ID) {
       try {
         await window.dbCentral.collection('usuarios').doc(window.CURRENT_USUARIO_ID)
@@ -281,10 +277,7 @@
     return _update(COLLECTIONS.grupoLoja, data);
   }
 
-  // ── Importação em massa (usada pelo botão "Importar Excel") ──
-  // Reserva um bloco de IDs numa única transação e grava tudo em lotes de
-  // até 450 documentos por chamada de batch, em vez de 1 transação + 1
-  // gravação por linha (o que travava com milhares de registros).
+  // ── Importação em massa ──
   async function importarEmMassa(collName, rows) {
     const db = getDb();
     if (!rows || !rows.length) return { ok: true, importados: 0 };
@@ -297,7 +290,7 @@
       return atual + 1;
     });
 
-    const CHUNK = 450; // limite do Firestore é 500 operações por batch
+    const CHUNK = 450;
     let importados = 0;
     for (let i = 0; i < rows.length; i += CHUNK) {
       const batch = db.batch();
@@ -314,18 +307,17 @@
     return { ok: true, importados, idInicial };
   }
 
-  // ── Limpeza em lote de uma coleção inteira (usado pelo botão "Limpar Base") ──
+  // ── Limpeza em lote de uma coleção inteira ──
   async function limparColecao(collName) {
     const db = getDb();
     const snap = await db.collection(collName).get();
     const docs = snap.docs;
-    const CHUNK = 450; // limite do Firestore é 500 operações por batch
+    const CHUNK = 450;
     for (let i = 0; i < docs.length; i += CHUNK) {
       const batch = db.batch();
       docs.slice(i, i + CHUNK).forEach(d => batch.delete(d.ref));
       await batch.commit();
     }
-    // Reseta o contador de ID para essa coleção, para a próxima importação começar do 1
     await db.collection('_counters').doc(collName).delete().catch(() => {});
     _histCacheClear();
     return { ok: true, removidos: docs.length };
@@ -341,12 +333,159 @@
         _loadColl(COLLECTIONS.manifesto),
         _loadColl(_codErrosColl(perfil)),
         _loadColl(COLLECTIONS.fornecedor),
-        loadHistUltimos(perfil, 100), // só os 100 mais recentes — evita ler a coleção inteira em todo login
+        loadHistUltimos(perfil, 100),
         _loadColl(COLLECTIONS.regra),
         _loadColl(COLLECTIONS.justificativa),
         _loadColl(COLLECTIONS.grupoLoja)
       ]);
     return { compradores, comerciais, lojas, manifestos, codErros, fornecedores, historico, regras, justificativas, gruposLoja };
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //  DIAGNÓSTICOS — só leitura, não alteram nada. Podem ser removidos
+  //  depois que o problema do período estiver 100% confirmado.
+  // ════════════════════════════════════════════════════════════════
+
+  async function backfillDataISO(perfil) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    const snap = await db.collection(coll).get();
+    const semData = snap.docs.filter(d => !d.data().dataISO);
+    const CHUNK = 450;
+    let corrigidos = 0;
+    for (let i = 0; i < semData.length; i += CHUNK) {
+      const batch = db.batch();
+      semData.slice(i, i + CHUNK).forEach(doc => {
+        const iso = _dataBRparaISO(doc.data().data) || '1900-01-01';
+        batch.update(doc.ref, { dataISO: iso });
+      });
+      await batch.commit();
+      corrigidos += Math.min(CHUNK, semData.length - i);
+    }
+    _histCacheClear();
+    return { ok: true, totalLido: snap.size, corrigidos };
+  }
+
+  async function diagnosticarFormatosData(perfil) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    const snap = await db.collection(coll).get();
+
+    const contagem = { ddmmyyyy: 0, isoYYYYMMDD: 0, vazio: 0, outro: 0 };
+    const exemplosOutro = [];
+    const exemplosVazio = [];
+
+    snap.forEach(doc => {
+      const v = doc.data().data;
+      if (v === undefined || v === null || String(v).trim() === '') {
+        contagem.vazio++;
+        if (exemplosVazio.length < 5) exemplosVazio.push(doc.id);
+        return;
+      }
+      const s = String(v).trim();
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) { contagem.ddmmyyyy++; return; }
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) { contagem.isoYYYYMMDD++; return; }
+      contagem.outro++;
+      if (exemplosOutro.length < 8) exemplosOutro.push({ id: doc.id, valor: s });
+    });
+
+    return { total: snap.size, contagem, exemplosOutro, exemplosVazio };
+  }
+
+  async function diagnosticarDataISO(perfil, de, ate) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    const snap = await db.collection(coll).get();
+
+    let semCampoDataISO = 0;
+    let comDataISOErrada = 0;
+    let deveriaEstarNoPeriodo = 0;
+    let realmenteEstaNoPeriodoPeloCampo = 0;
+    const exemplosSemCampo = [];
+    const exemplosErrados = [];
+
+    snap.forEach(doc => {
+      const row = doc.data();
+      const isoCorreto = _dataBRparaISO(row.data);
+      const dentroDoPeriodo = isoCorreto && isoCorreto >= de && isoCorreto <= ate;
+      if (dentroDoPeriodo) deveriaEstarNoPeriodo++;
+
+      if (row.dataISO === undefined || row.dataISO === null || row.dataISO === '') {
+        semCampoDataISO++;
+        if (exemplosSemCampo.length < 5) exemplosSemCampo.push({ id: doc.id, data: row.data });
+      } else if (row.dataISO !== isoCorreto) {
+        comDataISOErrada++;
+        if (exemplosErrados.length < 5) exemplosErrados.push({ id: doc.id, data: row.data, dataISO_gravado: row.dataISO, dataISO_correto: isoCorreto });
+      } else if (row.dataISO >= de && row.dataISO <= ate) {
+        realmenteEstaNoPeriodoPeloCampo++;
+      }
+    });
+
+    return {
+      totalDocs: snap.size,
+      semCampoDataISO,
+      comDataISOErrada,
+      deveriaEstarNoPeriodo,
+      realmenteEstaNoPeriodoPeloCampo,
+      exemplosSemCampo,
+      exemplosErrados
+    };
+  }
+
+  async function obterRangeDatas(perfil) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    const [maisAntigo, maisNovo] = await Promise.all([
+      db.collection(coll).orderBy('dataISO', 'asc').limit(1).get(),
+      db.collection(coll).orderBy('dataISO', 'desc').limit(1).get()
+    ]);
+    return {
+      maisAntigo: maisAntigo.empty ? null : maisAntigo.docs[0].data().dataISO,
+      maisNovo: maisNovo.empty ? null : maisNovo.docs[0].data().dataISO
+    };
+  }
+
+  async function diagnosticarQueryReal(perfil, de, ate) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+
+    const [querySnap, fullSnap] = await Promise.all([
+      db.collection(coll)
+        .where('dataISO', '>=', de)
+        .where('dataISO', '<=', ate)
+        .orderBy('dataISO', 'desc')
+        .get(),
+      db.collection(coll).get()
+    ]);
+
+    const viaQueryReal = querySnap.size;
+    const tiposDataISO = {};
+    let viaFiltroManual = 0;
+    const exemplosForaDaQuery = [];
+    const idsNaQuery = new Set(querySnap.docs.map(d => d.id));
+
+    fullSnap.forEach(doc => {
+      const row = doc.data();
+      const v = row.dataISO;
+      const tipo = typeof v;
+      tiposDataISO[tipo] = (tiposDataISO[tipo] || 0) + 1;
+
+      const deveriaEntrar = (typeof v === 'string') && v >= de && v <= ate;
+      if (deveriaEntrar) {
+        viaFiltroManual++;
+        if (!idsNaQuery.has(doc.id) && exemplosForaDaQuery.length < 8) {
+          exemplosForaDaQuery.push({ id: doc.id, dataISO: v, data: row.data });
+        }
+      }
+    });
+
+    return {
+      totalDocsNaColecao: fullSnap.size,
+      viaQueryReal,
+      viaFiltroManual,
+      tiposDataISO,
+      exemplosForaDaQuery
+    };
   }
 
   // ── Tabela de despacho: nome do método (chamado por google.script.run.X(...)) → handler ──
@@ -384,155 +523,10 @@
     deleteGrupoLoja: (id) => _delete(COLLECTIONS.grupoLoja, id),
     loadSenhaSistema, saveSenhaSistema,
     loadEmailRecuperacao, saveEmailRecuperacao,
-  limparColecao, importarEmMassa,
+    limparColecao, importarEmMassa,
     backfillDataISO, diagnosticarFormatosData, diagnosticarDataISO,
     obterRangeDatas, diagnosticarQueryReal
   };
-
-  // ── DIAGNÓSTICO 3 — roda a CONSULTA REAL do Firestore (com where/orderBy,
-  // igual ao sistema usa) e compara com uma contagem manual completa feita
-  // ao mesmo tempo, pra achar diferença entre "o que a query devolve" e
-  // "o que realmente existe". Só leitura. ──
-  async function diagnosticarQueryReal(perfil, de, ate) {
-    const db = getDb();
-    const coll = _histColl(perfil);
-
-    const [querySnap, fullSnap] = await Promise.all([
-      db.collection(coll)
-        .where('dataISO', '>=', de)
-        .where('dataISO', '<=', ate)
-        .orderBy('dataISO', 'desc')
-        .get(),
-      db.collection(coll).get()
-    ]);
-
-    const viaQueryReal = querySnap.size;
-    const tiposDataISO = {};
-    let viaFiltroManual = 0;
-    const exemplosForaDaQuery = [];
-
-    const idsNaQuery = new Set(querySnap.docs.map(d => d.id));
-
-    fullSnap.forEach(doc => {
-      const row = doc.data();
-      const v = row.dataISO;
-      const tipo = typeof v;
-      tiposDataISO[tipo] = (tiposDataISO[tipo] || 0) + 1;
-
-      const deveriaEntrar = (typeof v === 'string') && v >= de && v <= ate;
-      if (deveriaEntrar) {
-        viaFiltroManual++;
-        if (!idsNaQuery.has(doc.id) && exemplosForaDaQuery.length < 8) {
-          // documento que DEVERIA aparecer na query mas não apareceu
-          exemplosForaDaQuery.push({ id: doc.id, dataISO: v, data: row.data });
-        }
-      }
-    });
-
-    return {
-      totalDocsNaColecao: fullSnap.size,
-      viaQueryReal,        // o que o Firestore devolveu de verdade
-      viaFiltroManual,      // contagem feita agora, no mesmo instante, comparando strings
-      tiposDataISO,         // tipos de dado que o campo dataISO realmente tem (deveria ser só "string")
-      exemplosForaDaQuery   // docs que deveriam aparecer na query e não apareceram
-    };
-  }
-
-  // ── DIAGNÓSTICO 2 — compara o que DEVERIA estar no período (calculado
-  // a partir do campo "data", que sabemos que está 100% correto) contra
-  // o que o campo "dataISO" realmente tem gravado. Só leitura. ──
-  async function diagnosticarDataISO(perfil, de, ate) {
-    const db = getDb();
-    const coll = _histColl(perfil);
-    const snap = await db.collection(coll).get(); // 1 leitura completa, diagnóstico único
-
-    let semCampoDataISO = 0;
-    let comDataISOErrada = 0;
-    let deveriaEstarNoPeriodo = 0;
-    let realmenteEstaNoPeriodoPeloCampo = 0;
-    const exemplosSemCampo = [];
-    const exemplosErrados = [];
-
-    snap.forEach(doc => {
-      const row = doc.data();
-      const isoCorreto = _dataBRparaISO(row.data); // fonte confiável
-      const dentroDoPeriodo = isoCorreto && isoCorreto >= de && isoCorreto <= ate;
-      if (dentroDoPeriodo) deveriaEstarNoPeriodo++;
-
-      if (row.dataISO === undefined || row.dataISO === null || row.dataISO === '') {
-        semCampoDataISO++;
-        if (exemplosSemCampo.length < 5) exemplosSemCampo.push({ id: doc.id, data: row.data });
-      } else if (row.dataISO !== isoCorreto) {
-        comDataISOErrada++;
-        if (exemplosErrados.length < 5) exemplosErrados.push({ id: doc.id, data: row.data, dataISO_gravado: row.dataISO, dataISO_correto: isoCorreto });
-      } else if (row.dataISO >= de && row.dataISO <= ate) {
-        realmenteEstaNoPeriodoPeloCampo++;
-      }
-    });
-
-    return {
-      totalDocs: snap.size,
-      semCampoDataISO,
-      comDataISOErrada,
-      deveriaEstarNoPeriodo,        // calculado via campo "data" (confiável)
-      realmenteEstaNoPeriodoPeloCampo, // calculado via campo "dataISO" gravado
-      exemplosSemCampo,
-      exemplosErrados
-    };
-  }
-
-  // ── DIAGNÓSTICO — só leitura, não grava nada. Roda 1x pra entender
-  // que formatos de data existem de verdade na base antes de corrigir. ──
-  async function diagnosticarFormatosData(perfil) {
-    const db = getDb();
-    const coll = _histColl(perfil);
-    const snap = await db.collection(coll).get(); // 1 leitura completa, diagnóstico único
-
-    const contagem = { ddmmyyyy: 0, isoYYYYMMDD: 0, vazio: 0, outro: 0 };
-    const exemplosOutro = [];
-    const exemplosVazio = [];
-
-    snap.forEach(doc => {
-      const v = doc.data().data;
-      if (v === undefined || v === null || String(v).trim() === '') {
-        contagem.vazio++;
-        if (exemplosVazio.length < 5) exemplosVazio.push(doc.id);
-        return;
-      }
-      const s = String(v).trim();
-      if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) { contagem.ddmmyyyy++; return; }
-      if (/^\d{4}-\d{2}-\d{2}/.test(s)) { contagem.isoYYYYMMDD++; return; }
-      contagem.outro++;
-      if (exemplosOutro.length < 8) exemplosOutro.push({ id: doc.id, valor: s });
-    });
-
-    return { total: snap.size, contagem, exemplosOutro, exemplosVazio };
-  }
-
-  // ── BACKFILL — roda UMA VEZ SÓ, pra gravar dataISO nos 5.000+ registros
-  // antigos que não têm o campo (foram importados antes dessa otimização).
-  // Custa 1 leitura completa da coleção (inevitável, é a única vez que
-  // isso precisa acontecer) + grava em lotes só os documentos que faltam.
-  // Depois de rodar 1x com sucesso, pode remover esse bloco e o handler acima.
-  async function backfillDataISO(perfil) {
-    const db = getDb();
-    const coll = _histColl(perfil);
-    const snap = await db.collection(coll).get(); // 1x só, custo aceito e necessário
-    const semData = snap.docs.filter(d => !d.data().dataISO);
-    const CHUNK = 450;
-    let corrigidos = 0;
-    for (let i = 0; i < semData.length; i += CHUNK) {
-      const batch = db.batch();
-      semData.slice(i, i + CHUNK).forEach(doc => {
-        const iso = _dataBRparaISO(doc.data().data) || '1900-01-01';
-        batch.update(doc.ref, { dataISO: iso });
-      });
-      await batch.commit();
-      corrigidos += Math.min(CHUNK, semData.length - i);
-    }
-    _histCacheClear();
-    return { ok: true, totalLido: snap.size, corrigidos };
-  }
 
   // ── Proxy que imita a API do google.script.run ──
   function makeProxy() {
@@ -553,7 +547,7 @@
             }
             if (fail) fail(err); else throw err;
           });
-        return makeProxy(); // nova instância limpa para a próxima chamada encadeada
+        return makeProxy();
       };
     });
     return proxy;
