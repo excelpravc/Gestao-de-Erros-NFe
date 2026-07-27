@@ -115,13 +115,41 @@
     }
     return '1900-01-01';
   }
-  async function loadHistFiltrado(de, ate, perfil) {
-    const rows = await _loadColl(_histColl(perfil));
-    return rows.filter(r => {
-      const d = _parseDataBR(r.data);
-      return d >= de && d <= ate;
-    });
-  }
+  // ════════════════════════════════════════════════════════════════
+//  OTIMIZADO: Filtro direto no Firestore + Paginação
+// ════════════════════════════════════════════════════════════════
+async function loadHistFiltrado(de, ate, perfil, limite, cursorId) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    let q = db.collection(coll);
+    
+    // Converte datas BR para ISO para usar no filtro do Firestore
+    const deISO = _parseDataBR(de);
+    const ateISO = _parseDataBR(ate);
+    
+    // FILTRO NO SERVIDOR: Reduz drasticamente as leituras
+    if (deISO && deISO !== '1900-01-01') q = q.where('dataISO', '>=', deISO);
+    if (ateISO && ateISO !== '1900-01-01') q = q.where('dataISO', '<=', ateISO);
+    
+    const snap = await q.get();
+    let rows = snap.docs.map(d => d.data());
+    
+    // Ordenação e Paginação no cliente (evita necessidade de índice composto no Firestore)
+    rows.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+    
+    if (cursorId) {
+        const idx = rows.findIndex(r => Number(r.id) === Number(cursorId));
+        if (idx !== -1) {
+            rows = rows.slice(idx + 1);
+        }
+    }
+    
+    if (limite) {
+        rows = rows.slice(0, Number(limite));
+    }
+    
+    return rows;
+}
 
   // ── Busca direta por DANF: só traz os documentos que batem (leitura barata) ──
   async function buscarDanfNoHistorico(danf, perfil) {
