@@ -145,31 +145,28 @@
     const db = getDb();
     const coll = _histColl(perfil);
 
-    // Contagem primeiro: no Firestore, uma consulta .count() custa 1 leitura
-    // FIXA, não importa se o período tem 10 ou 10.000 documentos. Isso evita
-    // que alguém escolha sem querer um período gigante e estoure a cota.
-    const countSnap = await db.collection(coll)
-      .where('dataISO', '>=', de)
-      .where('dataISO', '<=', ate)
-      .count().get();
-    const total = countSnap.data().count;
-
+    // Trava de segurança SEM precisar de .count() (não disponível nesse
+    // ambiente): pede 1 documento a mais que o limite. Se vier o limite+1,
+    // sabemos que o período é grande demais e paramos ali — nunca lemos
+    // mais que LIMITE_SEGURANCA+1 documentos, mesmo que o período real
+    // tenha 5.000+.
     const LIMITE_SEGURANCA = 3000;
-    if (total > LIMITE_SEGURANCA) {
-      const err = new Error(
-        'Este período tem ' + total + ' registro(s) — reduza o intervalo de datas ' +
-        '(limite de segurança: ' + LIMITE_SEGURANCA + ') para não gastar a cota gratuita de uma vez.'
-      );
-      err.code = 'periodo-grande-demais';
-      err.total = total;
-      throw err;
-    }
-
     const snap = await db.collection(coll)
       .where('dataISO', '>=', de)
       .where('dataISO', '<=', ate)
       .orderBy('dataISO', 'desc')
+      .limit(LIMITE_SEGURANCA + 1)
       .get();
+
+    if (snap.docs.length > LIMITE_SEGURANCA) {
+      const err = new Error(
+        'Este período tem mais de ' + LIMITE_SEGURANCA + ' registro(s) — reduza o ' +
+        'intervalo de datas para não gastar a cota gratuita de uma vez.'
+      );
+      err.code = 'periodo-grande-demais';
+      throw err;
+    }
+
     const rows = snap.docs.map(d => d.data());
     _histCacheSet(cacheKey, rows);
     return rows;
