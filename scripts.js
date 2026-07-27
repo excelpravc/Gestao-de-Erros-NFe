@@ -108,8 +108,6 @@ fixMenu.innerHTML = `
 `;
 document.head.appendChild(fixMenu);
 // ─ ESTADO GLOBAL ──
-let _cacheDashboard = { de: '', ate: '', perfil: '', dados: [] };
-let _cacheHistorico = { de: '', ate: '', perfil: '', dados: [], completo: false };
 let DB={compradores:[],comerciais:[],lojas:[],manifestos:[],codErros:[],fornecedores:[],historico:[],regras:[],justificativas:[],gruposLoja:[]};
 let cfg={nome:'',tel:'',cargo:''};
 let _histCompleto = []; // Guarda os registros já baixados na tela (memória local)
@@ -237,75 +235,56 @@ erros.forEach(function(e){var o=document.createElement('option');o.value=e;o.tex
 if(pvL)sLoja.value=pvL;
 if(pvE)sErro.value=pvE;
 }
-function gerarDash() {
-    const de = document.getElementById('dash-de').value;
-    const ate = document.getElementById('dash-ate').value;
-    if(!de || !ate){toast('Selecione o período!',true);return;}
-    
-    const filtroLoja = document.getElementById('dash-loja') ? document.getElementById('dash-loja').value : '';
-    const filtroErro = document.getElementById('dash-erro') ? document.getElementById('dash-erro').value : '';
-    const filtroStatus = document.getElementById('dash-status') ? document.getElementById('dash-status').value : '';
-
-    // VERIFICAÇÃO DE CACHE: Evita leitura redundante
-    if (_cacheDashboard.de === de && _cacheDashboard.ate === ate && _cacheDashboard.perfil === _perfilAtivo() && _cacheDashboard.dados.length > 0) {
-        renderDashFromData(_cacheDashboard.dados, de, ate, filtroLoja, filtroErro, filtroStatus);
-        return;
-    }
-
-    toast('⏳ Buscando dados do período...');
-    google.script.run
-    .withSuccessHandler(function(hist){
-        _cacheDashboard = { de, ate, perfil: _perfilAtivo(), dados: hist || [] };
-        renderDashFromData(hist, de, ate, filtroLoja, filtroErro, filtroStatus);
-    })
-    .withFailureHandler(function(e){ toast('Erro ao buscar dados: '+e.message,true); })
-    .loadHistFiltrado(de, ate, _perfilAtivo(), 5000, null); // Busca até 5000 para o Dashboard
+function gerarDash(){
+const de=document.getElementById('dash-de').value;
+const ate=document.getElementById('dash-ate').value;
+if(!de||!ate){toast('Selecione o período!',true);return;}
+const filtroLoja=document.getElementById('dash-loja')?document.getElementById('dash-loja').value:'';
+const filtroErro=document.getElementById('dash-erro')?document.getElementById('dash-erro').value:'';
+const filtroStatus=document.getElementById('dash-status')?document.getElementById('dash-status').value:'';
+toast('⏳ Buscando dados do período...');
+google.script.run
+.withSuccessHandler(function(hist){
+if(!hist||!hist.length){
+DB.historico = [];
+['kpi-tot','kpi-forn','kpi-errt','kpi-loja'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='0';});
+['kpi-ent','kpi-ant'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='0';});
+['ch-erros-pie','ch-lojas','ch-linha','ch-forn','ch-comp','ch-status'].forEach(id=>destroyChart(id));
+['rl-forn','rl-erros','rl-erros-pie','rl-lojas','rl-comp','rl-status'].forEach(id=>{
+const el=document.getElementById(id);if(el)el.innerHTML='<div class="nd">Sem dados no período</div>';
+});
+const tb=document.getElementById('dash-det');
+if(tb)tb.innerHTML='<tr><td colspan="9" class="nd">Nenhuma ocorrência no período selecionado.</td></tr>';
+toast('Nenhum registro no período selecionado.',true);
+return;
 }
-
-function renderDashFromData(hist, de, ate, filtroLoja, filtroErro, filtroStatus) {
-    if(!hist || !hist.length){
-        DB.historico = [];
-        ['kpi-tot','kpi-forn','kpi-errt','kpi-loja'].forEach(id =>{const el=document.getElementById(id);if(el)el.textContent='0';});
-        ['kpi-ent','kpi-ant'].forEach(id =>{const el=document.getElementById(id);if(el)el.textContent='0';});
-        ['ch-erros-pie','ch-lojas','ch-linha','ch-forn','ch-comp','ch-status'].forEach(id =>destroyChart(id));
-        ['rl-forn','rl-erros','rl-erros-pie','rl-lojas','rl-comp','rl-status'].forEach(id =>{
-            const el=document.getElementById(id);if(el)el.innerHTML='<div class="nd">Sem dados no período</div>';
-        });
-        const tb=document.getElementById('dash-det');
-        if(tb)tb.innerHTML='<tr><td colspan="9" class="nd">Nenhuma ocorrência no período selecionado.</td></tr>';
-        toast('Nenhum registro no período selecionado.',true);
-        return;
-    }
-    
-    DB.historico = hist;
-    populateDashFilters();
-    const registros = hist.filter(r => {
-        if(filtroLoja && r.loja !== filtroLoja) return false;
-        if(filtroErro && r.erroDesc !== filtroErro) return false;
-        if(filtroStatus && r.status !== filtroStatus) return false;
-        return true;
-    });
-    
-    const fmtD = v => {const p=v.split('-');return `${p[2]}/${p[1]}/${p[0]}`;};
-    let lblTxt = `${fmtD(de)} → ${fmtD(ate)} · ${registros.length} registro(s)`;
-    if(filtroLoja) lblTxt += ` · Loja: ${filtroLoja}`;
-    if(filtroErro) lblTxt += ` · Erro: ${filtroErro}`;
-    if(filtroStatus) lblTxt += ` · Status: ${filtroStatus}`;
-    
-    document.getElementById('dash-plbl').textContent = lblTxt;
-    document.getElementById('ph-gen').textContent = new Date().toLocaleString('pt-BR');
-    document.getElementById('ph-period').textContent = `Período: ${fmtD(de)} a ${fmtD(ate)}`;
-    if(cfg.nome) document.getElementById('ph-assina').textContent = `Responsável: ${cfg.nome}${cfg.cargo?' · '+cfg.cargo:''}`;
-    
-    renderKpis(registros);
-    renderChartErrosPie(registros);
-    renderChartLojas(registros);
-    renderChartLinha(registros, de, ate);
-    renderRankings(registros);
-    renderChartStatus(registros);
-    renderDetTable(registros);
-    toast('✓ Dashboard gerado!');
-}
+DB.historico=hist;
+populateDashFilters();
+const registros=hist.filter(r=>{
+if(filtroLoja&&r.loja!==filtroLoja) return false;
+if(filtroErro&&r.erroDesc!==filtroErro) return false;
+if(filtroStatus&&r.status!==filtroStatus) return false;
+return true;
+});
+const fmtD=v=>{const p=v.split('-');return`${p[2]}/${p[1]}/${p[0]}`;};
+let lblTxt=`${fmtD(de)} → ${fmtD(ate)} · ${registros.length} registro(s)`;
+if(filtroLoja) lblTxt+=` · Loja: ${filtroLoja}`;
+if(filtroErro) lblTxt+=` · Erro: ${filtroErro}`;
+if(filtroStatus) lblTxt+=` · Status: ${filtroStatus}`;
+document.getElementById('dash-plbl').textContent=lblTxt;
+document.getElementById('ph-gen').textContent=new Date().toLocaleString('pt-BR');
+document.getElementById('ph-period').textContent=`Período: ${fmtD(de)} a ${fmtD(ate)}`;
+if(cfg.nome) document.getElementById('ph-assina').textContent=`Responsável: ${cfg.nome}${cfg.cargo?' · '+cfg.cargo:''}`;
+// ─ DESPACHO PARA FUNÇÕES DE PERFIL ──
+renderKpis(registros);
+renderChartErrosPie(registros);
+renderChartLojas(registros);
+renderChartLinha(registros,de,ate);
+renderRankings(registros);
+renderChartStatus(registros);
+renderDetTable(registros);
+toast('✓ Dashboard gerado!');
+})
 .withFailureHandler(function(e){ toast('Erro ao buscar dados: '+e.message,true); })
 .loadHistFiltrado(de, ate, _perfilAtivo());
 }
@@ -2517,30 +2496,8 @@ try {
 await new Promise((resolve, reject) => {
 google.script.run
 .withSuccessHandler(r => {
-    if(r.ok) { 
-        const hoje = new Date().toLocaleDateString('pt-BR');
-        const novoReg = Object.assign({}, data, {id: r.id, data: hoje});
-        DB.historico.unshift(novoReg);
-        
-        // ATUALIZAÇÃO DE CACHE: Evita nova leitura do Firestore
-        const dataISO = parseDataBR(hoje);
-        const deDashISO = parseDataBR(_cacheDashboard.de);
-        const ateDashISO = parseDataBR(_cacheDashboard.ate);
-        if (_cacheDashboard.dados.length > 0 && dataISO >= deDashISO && dataISO <= ateDashISO) {
-            _cacheDashboard.dados.unshift(novoReg);
-        }
-        
-        const deHistISO = parseDataBR(_cacheHistorico.de);
-        const ateHistISO = parseDataBR(_cacheHistorico.ate);
-        if (_cacheHistorico.dados.length > 0 && dataISO >= deHistISO && dataISO <= ateHistISO) {
-            _cacheHistorico.dados.unshift(novoReg);
-            _histCompleto = _cacheHistorico.dados;
-        }
-        
-        salvos++; 
-        resolve(); 
-    }
-    else reject(new Error('Erro no retorno do servidor'));
+if(r.ok) { const hoje = new Date().toLocaleDateString('pt-BR'); DB.historico.push(Object.assign({}, data, {id: r.id, data: hoje})); salvos++; resolve(); }
+else reject(new Error('Erro no retorno do servidor'));
 })
 .withFailureHandler(reject)
 .addHistorico(data);
@@ -2713,126 +2670,63 @@ document.getElementById('hist-ate').value = fmt(hoje);
 buscarHistPeriodo();
 }
 function buscarHistPeriodo() {
-    const de = document.getElementById('hist-de').value;
+    const de  = document.getElementById('hist-de').value;
     const ate = document.getElementById('hist-ate').value;
     if (!de || !ate) { toast('Selecione o período!', true); return; }
-    
-    // VERIFICAÇÃO DE CACHE
-    if (_cacheHistorico.de === de && _cacheHistorico.ate === ate && _cacheHistorico.perfil === _perfilAtivo() && _cacheHistorico.completo) {
-        _histCompleto = _cacheHistorico.dados;
-        DB.historico = _histCompleto.slice(0, 100);
-        _histModoServidor = true;
-        filtrarHist();
-        gerarDash();
-        atualizarUIHistorico();
-        return;
-    }
-
     const lbl = document.getElementById('hist-count-lbl');
-    const tb = document.getElementById('tb-hist');
+    const tb  = document.getElementById('tb-hist');
     if (lbl) lbl.textContent = '⏳ Buscando na base de dados...';
-    if (tb) tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);font-style:italic">Consultando Sistema...</td></tr>';
-
+    if (tb)  tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);font-style:italic">Consultando Sistema...</td></tr>';
+    
     google.script.run
     .withSuccessHandler(function(lista) {
+        // 1. Guarda TODOS os registros do período na memória para paginação frontend
         _histCompleto = lista || [];
-        _cacheHistorico = { de, ate, perfil: _perfilAtivo(), dados: _histCompleto, completo: true };
+        _histModoServidor = false; // período já baixado por completo — "Carregar Mais" pagina local
+        
+        // 2. Mostra apenas os primeiros 100 na tela inicialmente
         DB.historico = _histCompleto.slice(0, 100);
-        _histModoServidor = true;
+        
         _histCarregado = true;
         filtrarHist();
         gerarDash();
-        atualizarUIHistorico();
-        verificarVencimentos();
-    })
-    .withFailureHandler(function(e) {
-        if (lbl) lbl.textContent = 'Erro ao carregar';
-        toast('Falha: ' + e.message, true);
-    })
-    .loadHistFiltrado(de, ate, _perfilAtivo(), 100, null); // PAGINAÇÃO NO SERVIDOR
-}
-
-function histCarregarMais() {
-    const btn = document.getElementById('btn-hist-carregar-mais');
-    if (btn) { btn.textContent = '⏳ Carregando...'; btn.disabled = true; }
-    
-    const ultimoId = DB.historico.length ? DB.historico[DB.historico.length - 1].id : null;
-    const de = document.getElementById('hist-de').value;
-    const ate = document.getElementById('hist-ate').value;
-    
-    google.script.run
-    .withSuccessHandler(function(proximos) {
-        proximos = proximos || [];
-        if (proximos.length > 0) {
-            DB.historico = DB.historico.concat(proximos);
-            _histCompleto = _histCompleto.concat(proximos);
-            _cacheHistorico.dados = _histCompleto;
-            filtrarHist();
+        
+        const fmtD = v => { const p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+        if (lbl) lbl.textContent = DB.historico.length + ' de ' + _histCompleto.length + ' registro(s) · ' + fmtD(de) + ' → ' + fmtD(ate);
+        
+        const hoje = new Date(); hoje.setHours(0,0,0,0);
+        let vencidas = [], proximas = [];
+        (DB.historico||[]).forEach(function(r) {
+            if (!r.vencimento || String(r.vencimento).trim() === '') return;
+            if (r.situacao === 'Lançada') return;
+            const vStr = String(r.vencimento).trim().split('T')[0];
+            let vd = null;
+            if (vStr.includes('/')) { const p=vStr.split('/'); if(p.length===3) vd=new Date(Number(p[2]),Number(p[1])-1,Number(p[0])); }
+            else if (vStr.includes('-')) { const p=vStr.split('-'); if(p.length===3) vd=new Date(Number(p[0]),Number(p[1])-1,Number(p[2])); }
+            if (!vd || isNaN(vd.getTime())) return;
+            vd.setHours(0,0,0,0);
+            const diff = Math.ceil((vd - hoje) / 86400000);
+            if (diff < 0) vencidas.push({ danf: r.danf, dias: Math.abs(diff) });
+            else if (diff <= 7) proximas.push({ danf: r.danf, dias: diff });
+        });
+        
+        if (!vencidas.length && !proximas.length) {
+            toast('✓ Busca concluída!');
+        } else {
+            const partes = [];
+            if (vencidas.length) {
+                const nfs = vencidas.slice(0,2).map(v => 'NF ' + v.danf + ' (' + v.dias + 'd vencida)').join(' | ');
+                const extra = vencidas.length > 2 ? ' +' + (vencidas.length-2) : '';
+                partes.push('🔴 ' + vencidas.length + ' vencida' + (vencidas.length >1?'s':'') + ': ' + nfs + extra);
+            }
+            if (proximas.length) {
+                const nfs = proximas.slice(0,2).map(v => v.dias===0 ? 'NF ' + v.danf + ' (hoje)' : 'NF ' + v.danf + ' (' + v.dias + 'd)').join(' | ');
+                const extra = proximas.length > 2 ? ' +' + (proximas.length-2) : '';
+                partes.push('🟠 ' + proximas.length + ' a vencer: ' + nfs + extra);
+            }
+            toast('⚠ ' + partes.join('  ·  '), true, 5000);
+            setTimeout(function() { mostrarAlertasVencimento(DB.historico || []); }, 300);
         }
-        if (proximos.length < 100) {
-            if (btn) { btn.textContent = '✓ Todos os registros carregados'; setTimeout(() => { btn.style.display = 'none'; }, 1500); }
-        } else if (btn) {
-            btn.textContent = '📥 Carregar Mais (100 registros)'; btn.disabled = false;
-        }
-    })
-    .withFailureHandler(function(e) {
-        if (btn) { btn.textContent = '📥 Carregar Mais (100 registros)'; btn.disabled = false; }
-        toast('Falha ao carregar mais registros: ' + e.message, true);
-    })
-    .loadHistFiltrado(de, ate, _perfilAtivo(), 100, ultimoId);
-}
-
-// Função auxiliar para atualizar UI do histórico (extraída para evitar duplicação)
-function atualizarUIHistorico() {
-    const lbl = document.getElementById('hist-count-lbl');
-    const fmtD = v => { const p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
-    const de = document.getElementById('hist-de').value;
-    const ate = document.getElementById('hist-ate').value;
-    if (lbl) lbl.textContent = DB.historico.length + ' de ' + _histCompleto.length + ' registro(s) · ' + fmtD(de) + ' → ' + fmtD(ate);
-    
-    const wrapMais = document.getElementById('hist-carregar-mais-wrap');
-    const btnMais = document.getElementById('btn-hist-carregar-mais');
-    if (_histCompleto.length > 100) {
-        if (wrapMais) wrapMais.style.display = 'block';
-        if (btnMais) { btnMais.style.display = ''; btnMais.disabled = false; btnMais.textContent = '📥 Carregar Mais (100 registros)'; }
-    } else if (wrapMais) {
-        wrapMais.style.display = 'none';
-    }
-}
-
-function verificarVencimentos() {
-    const hoje = new Date(); hoje.setHours(0,0,0,0);
-    let vencidas = [], proximas = [];
-    (DB.historico||[]).forEach(function(r) {
-        if (!r.vencimento || String(r.vencimento).trim() === '') return;
-        if (r.situacao === 'Lançada') return;
-        const vStr = String(r.vencimento).trim().split('T')[0];
-        let vd = null;
-        if (vStr.includes('/')) { const p=vStr.split('/'); if(p.length===3) vd=new Date(Number(p[2]),Number(p[1])-1,Number(p[0])); }
-        else if (vStr.includes('-')) { const p=vStr.split('-'); if(p.length===3) vd=new Date(Number(p[0]),Number(p[1])-1,Number(p[2])); }
-        if (!vd || isNaN(vd.getTime())) return;
-        vd.setHours(0,0,0,0);
-        const diff = Math.ceil((vd - hoje) / 86400000);
-        if (diff < 0) vencidas.push({ danf: r.danf, dias: Math.abs(diff) });
-        else if (diff <= 7) proximas.push({ danf: r.danf, dias: diff });
-    });
-    if (!vencidas.length && !proximas.length) { toast('✓ Busca concluída!'); } 
-    else {
-        const partes = [];
-        if (vencidas.length) {
-            const nfs = vencidas.slice(0,2).map(v => 'NF ' + v.danf + ' (' + v.dias + 'd vencida)').join(' | ');
-            const extra = vencidas.length > 2 ? ' +' + (vencidas.length-2) : '';
-            partes.push('🔴 ' + vencidas.length + ' vencida' + (vencidas.length >1?'s':'') + ': ' + nfs + extra);
-        }
-        if (proximas.length) {
-            const nfs = proximas.slice(0,2).map(v => v.dias===0 ? 'NF ' + v.danf + ' (hoje)' : 'NF ' + v.danf + ' (' + v.dias + 'd)').join(' | ');
-            const extra = proximas.length > 2 ? ' +' + (proximas.length-2) : '';
-            partes.push('🟠 ' + proximas.length + ' a vencer: ' + nfs + extra);
-        }
-        toast('⚠ ' + partes.join('  ·  '), true, 5000);
-        setTimeout(function() { mostrarAlertasVencimento(DB.historico || []); }, 300);
-    }
-}
         
         // 3. Lógica do botão "Carregar Mais" — precisa mostrar o WRAP, não só o botão
         // (o wrap nasce com display:none no HTML; mostrar só o filho não resolve)
