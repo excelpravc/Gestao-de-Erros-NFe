@@ -385,8 +385,58 @@
     loadSenhaSistema, saveSenhaSistema,
     loadEmailRecuperacao, saveEmailRecuperacao,
   limparColecao, importarEmMassa,
-    backfillDataISO, diagnosticarFormatosData, diagnosticarDataISO
+    backfillDataISO, diagnosticarFormatosData, diagnosticarDataISO,
+    obterRangeDatas, diagnosticarQueryReal
   };
+
+  // ── DIAGNÓSTICO 3 — roda a CONSULTA REAL do Firestore (com where/orderBy,
+  // igual ao sistema usa) e compara com uma contagem manual completa feita
+  // ao mesmo tempo, pra achar diferença entre "o que a query devolve" e
+  // "o que realmente existe". Só leitura. ──
+  async function diagnosticarQueryReal(perfil, de, ate) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+
+    const [querySnap, fullSnap] = await Promise.all([
+      db.collection(coll)
+        .where('dataISO', '>=', de)
+        .where('dataISO', '<=', ate)
+        .orderBy('dataISO', 'desc')
+        .get(),
+      db.collection(coll).get()
+    ]);
+
+    const viaQueryReal = querySnap.size;
+    const tiposDataISO = {};
+    let viaFiltroManual = 0;
+    const exemplosForaDaQuery = [];
+
+    const idsNaQuery = new Set(querySnap.docs.map(d => d.id));
+
+    fullSnap.forEach(doc => {
+      const row = doc.data();
+      const v = row.dataISO;
+      const tipo = typeof v;
+      tiposDataISO[tipo] = (tiposDataISO[tipo] || 0) + 1;
+
+      const deveriaEntrar = (typeof v === 'string') && v >= de && v <= ate;
+      if (deveriaEntrar) {
+        viaFiltroManual++;
+        if (!idsNaQuery.has(doc.id) && exemplosForaDaQuery.length < 8) {
+          // documento que DEVERIA aparecer na query mas não apareceu
+          exemplosForaDaQuery.push({ id: doc.id, dataISO: v, data: row.data });
+        }
+      }
+    });
+
+    return {
+      totalDocsNaColecao: fullSnap.size,
+      viaQueryReal,        // o que o Firestore devolveu de verdade
+      viaFiltroManual,      // contagem feita agora, no mesmo instante, comparando strings
+      tiposDataISO,         // tipos de dado que o campo dataISO realmente tem (deveria ser só "string")
+      exemplosForaDaQuery   // docs que deveriam aparecer na query e não apareceram
+    };
+  }
 
   // ── DIAGNÓSTICO 2 — compara o que DEVERIA estar no período (calculado
   // a partir do campo "data", que sabemos que está 100% correto) contra
