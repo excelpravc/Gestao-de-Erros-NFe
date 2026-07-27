@@ -96,13 +96,19 @@
     const payload = Object.assign({}, data);
     if (!payload.data) payload.data = _hojeBR();
     payload.dataISO = _dataBRparaISO(payload.data) || new Date().toISOString().split('T')[0];
-    return _add(_histColl(payload.perfil), payload);
+    const r = await _add(_histColl(payload.perfil), payload);
+    _histCacheClear();
+    return r;
   }
   async function updateHistorico(data) {
-    return _update(_histColl(data && data.perfil), data);
+    const r = await _update(_histColl(data && data.perfil), data);
+    _histCacheClear();
+    return r;
   }
   async function deleteHistorico(id, perfil) {
-    return _delete(_histColl(perfil), id);
+    const r = await _delete(_histColl(perfil), id);
+    _histCacheClear();
+    return r;
   }
   function _parseDataBR(s) {
     if (!s || typeof s !== 'string') return '1900-01-01';
@@ -115,12 +121,54 @@
     }
     return '1900-01-01';
   }
+  // ── Cache em memória do histórico por período ──
+  // Reaproveita o resultado já baixado quando a mesma consulta é pedida
+  // de novo (Dashboard e Histórico com o mesmo período, re-clique em
+  // "Buscar", troca de aba). Expira em 60s para nunca mostrar dado velho
+  // depois de uma edição — e é limpo na hora quando algo é gravado.
+  const _histCache = new Map();
+  const HIST_CACHE_TTL_MS = 60000;
+  function _histCacheKey(perfil, de, ate) { return perfil + '|' + de + '|' + ate; }
+  function _histCacheGet(key) {
+    const hit = _histCache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.t > HIST_CACHE_TTL_MS) { _histCache.delete(key); return null; }
+    return hit.rows;
+  }
+  function _histCacheSet(key, rows) { _histCache.set(key, { rows, t: Date.now() }); }
+  function _histCacheClear() { _histCache.clear(); }
+
   async function loadHistFiltrado(de, ate, perfil) {
-    const rows = await _loadColl(_histColl(perfil));
-    return rows.filter(r => {
-      const d = _parseDataBR(r.data);
-      return d >= de && d <= ate;
-    });
+    const cacheKey = _histCacheKey(perfil, de, ate);
+    const cached = _histCacheGet(cacheKey);
+    if (cached) return cached; // reaproveitado — 0 leituras no Firestore
+
+    const db = getDb();
+    const coll = _histColl(perfil);
+
+    // Consulta só os documentos do período (campo dataISO, já existente
+    // nos seus documentos), em vez de ler a coleção inteira. Um teto de
+    // segurança evita que um período gigantesco leia demais de uma vez.
+    const LIMITE_SEGURANCA = 6000;
+    const snap = await db.collection(coll)
+      .where('dataISO', '>=', de)
+      .where('dataISO', '<=', ate)
+      .orderBy('dataISO', 'desc')
+      .limit(LIMITE_SEGURANCA + 1)
+      .get();
+
+    if (snap.docs.length > LIMITE_SEGURANCA) {
+      const err = new Error(
+        'Este período tem mais de ' + LIMITE_SEGURANCA + ' registro(s) — reduza o ' +
+        'intervalo de datas para não gastar a cota gratuita de uma vez.'
+      );
+      err.code = 'periodo-grande-demais';
+      throw err;
+    }
+
+    const rows = snap.docs.map(d => d.data());
+    _histCacheSet(cacheKey, rows);
+    return rows;
   }
 
   // ── Busca direta por DANF: só traz os documentos que batem (leitura barata) ──
@@ -154,7 +202,7 @@
       const bate = !loja || String(row.loja || '').trim().toLowerCase() === String(loja).trim().toLowerCase();
       if (bate) { batch.update(doc.ref, { situacao: 'Lançada' }); total++; }
     });
-    if (total > 0) await batch.commit();
+    if (total > 0) { await batch.commit(); _histCacheClear(); }
     return { ok: total > 0, totalMarcadas: total };
   }
 
@@ -261,6 +309,7 @@
       await batch.commit();
       importados += parte.length;
     }
+    _histCacheClear();
     return { ok: true, importados, idInicial };
   }
 
@@ -277,6 +326,7 @@
     }
     // Reseta o contador de ID para essa coleção, para a próxima importação começar do 1
     await db.collection('_counters').doc(collName).delete().catch(() => {});
+    _histCacheClear();
     return { ok: true, removidos: docs.length };
   }
 
