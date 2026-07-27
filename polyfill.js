@@ -99,7 +99,12 @@
     return _add(_histColl(payload.perfil), payload);
   }
   async function updateHistorico(data) {
-    return _update(_histColl(data && data.perfil), data);
+    const payload = Object.assign({}, data);
+    if (payload.data) {
+      const iso = _dataBRparaISO(payload.data);
+      if (iso) payload.dataISO = iso;
+    }
+    return _update(_histColl(payload && payload.perfil), payload);
   }
   async function deleteHistorico(id, perfil) {
     return _delete(_histColl(perfil), id);
@@ -116,11 +121,15 @@
     return '1900-01-01';
   }
   async function loadHistFiltrado(de, ate, perfil) {
-    const rows = await _loadColl(_histColl(perfil));
-    return rows.filter(r => {
-      const d = _parseDataBR(r.data);
-      return d >= de && d <= ate;
-    });
+    const db = getDb();
+    const coll = _histColl(perfil);
+    // Consulta indexada por dataISO — lê SÓ os documentos do período
+    // pedido, em vez de baixar a coleção inteira e filtrar depois.
+    const snap = await db.collection(coll)
+      .where('dataISO', '>=', de)
+      .where('dataISO', '<=', ate)
+      .get();
+    return snap.docs.map(d => d.data());
   }
 
   // ── Busca direta por DANF: só traz os documentos que batem (leitura barata) ──
@@ -256,12 +265,42 @@
       parte.forEach((row, j) => {
         const id = idInicial + i + j;
         const payload = Object.assign({}, row, { id });
+        // Se a linha tem um campo "data" (histórico) e ainda não tem
+        // dataISO, calcula agora — é o que permite a busca por período
+        // ser rápida e barata depois (ver loadHistFiltrado).
+        if (payload.data && !payload.dataISO) {
+          const iso = _dataBRparaISO(payload.data);
+          if (iso) payload.dataISO = iso;
+        }
         batch.set(db.collection(collName).doc(String(id)), payload);
       });
       await batch.commit();
       importados += parte.length;
     }
     return { ok: true, importados, idInicial };
+  }
+
+  // ── Migração ÚNICA: adiciona dataISO nos registros antigos que não têm.
+  // Precisa rodar 1 vez por cliente (botão em Configurações). Depois disso,
+  // loadHistFiltrado nunca mais precisa ler a coleção inteira.
+  async function migrarDatasHistoricoISO(perfil) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    const snap = await db.collection(coll).get(); // única leitura completa — custo pago 1 vez só
+    const semISO = snap.docs.filter(d => !d.data().dataISO);
+    const CHUNK = 450;
+    let corrigidos = 0, semData = 0;
+    for (let i = 0; i < semISO.length; i += CHUNK) {
+      const batch = db.batch();
+      const parte = semISO.slice(i, i + CHUNK);
+      parte.forEach(doc => {
+        const iso = _dataBRparaISO(doc.data().data);
+        if (iso) { batch.update(doc.ref, { dataISO: iso }); corrigidos++; }
+        else { semData++; }
+      });
+      await batch.commit();
+    }
+    return { ok: true, totalVerificados: snap.docs.length, corrigidos, semData };
   }
 
   // ── Limpeza em lote de uma coleção inteira (usado pelo botão "Limpar Base") ──
@@ -303,6 +342,7 @@
     loadAll,
     loadHistFiltrado,
     loadHistUltimos,
+    migrarDatasHistoricoISO,
     buscarDanfNoHistorico,
     addHistorico, updateHistorico, deleteHistorico, updateHistoricoSituacaoPorDANF,
     loadAssinatura, saveAssinatura,
