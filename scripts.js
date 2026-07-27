@@ -2307,7 +2307,7 @@ row.situacao = 'Lançada';
 });
 const _sl = document.getElementById('sel_loja');
 if (_sl && _perfilAtivo().toLowerCase() !== 'matriz') { _sl.value = ''; onPS('loja'); }
-setTimeout(()=>{ buscarHistPeriodo(); gerarDash(); }, 500);
+filtrarHist(); gerarDash();
 } else {
 const lojaEl    = document.getElementById('sel_loja');
 const lojaOpt   = lojaEl ? lojaEl.options[lojaEl.selectedIndex] : null;
