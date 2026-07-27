@@ -126,6 +126,12 @@
     return r;
   }
 
+  // Guarda a leitura completa que já está "em voo" para cada perfil — se
+  // duas telas pedirem loadHistFiltrado ao mesmo tempo logo após uma
+  // gravação (cache ainda desatualizado nas duas), a segunda chamada
+  // reaproveita a mesma leitura em vez de disparar outra em paralelo.
+  const _histLoadingPromise = new Map(); // perfilKey -> Promise<rows>
+
   async function loadHistFiltrado(de, ate, perfil) {
     const db = getDb();
     const perfilKey = _perfilKey(perfil);
@@ -138,9 +144,17 @@
     let rows;
     if (cache && cache.versao === versaoAtual) {
       rows = cache.rows; // reaproveitado — 0 leituras da coleção
+    } else if (_histLoadingPromise.has(perfilKey)) {
+      rows = await _histLoadingPromise.get(perfilKey); // reaproveita a leitura já em andamento
     } else {
-      rows = await _loadColl(_histColl(perfil)); // lê a coleção 1 vez só
-      _histFull.set(perfilKey, { rows, versao: versaoAtual });
+      const p = _loadColl(_histColl(perfil));
+      _histLoadingPromise.set(perfilKey, p);
+      try {
+        rows = await p; // lê a coleção 1 vez só
+        _histFull.set(perfilKey, { rows, versao: versaoAtual });
+      } finally {
+        _histLoadingPromise.delete(perfilKey);
+      }
     }
 
     return rows.filter(r => {
