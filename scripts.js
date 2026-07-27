@@ -4051,3 +4051,29 @@ function histCarregarMais() {
     })
     .loadHistUltimos(_perfilAtivo(), 100, ultimoId);
 }
+
+// ── Migração única: corrige registros antigos do histórico sem dataISO ──
+// (roda a partir do botão em Configurações → Manutenção — Índice de Datas)
+function rodarMigracaoDatasISO(){
+const btn=document.getElementById('btn-migrar-datas');
+const out=document.getElementById('migrar-datas-resultado');
+if(!confirm('Isso vai ler o histórico completo UMA VEZ para corrigir registros antigos. Pode levar alguns segundos dependendo da quantidade de registros. Continuar?')) return;
+if(btn){btn.textContent='⏳ Corrigindo…';btn.disabled=true;}
+if(out) out.textContent='Lendo registros, aguarde…';
+google.script.run
+.withSuccessHandler(function(r){
+if(btn){btn.textContent='🔧 Corrigir Índice de Datas (rodar 1x)';btn.disabled=false;}
+if(out){
+out.innerHTML='✓ Verificados: <strong style="color:var(--text)">'+r.totalVerificados+'</strong>'+
+' · Corrigidos: <strong style="color:var(--accent)">'+r.corrigidos+'</strong>'+
+(r.semData?' · Sem data válida: <strong style="color:var(--warn)">'+r.semData+'</strong>':'');
+}
+toast('✓ Migração concluída! '+r.corrigidos+' registro(s) corrigido(s).');
+})
+.withFailureHandler(function(e){
+if(btn){btn.textContent='🔧 Corrigir Índice de Datas (rodar 1x)';btn.disabled=false;}
+if(out) out.textContent='';
+toast('Erro na migração: '+(e&&e.message?e.message:e),true);
+})
+.migrarDatasHistoricoISO(_perfilAtivo());
+}
