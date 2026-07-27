@@ -384,9 +384,52 @@
     deleteGrupoLoja: (id) => _delete(COLLECTIONS.grupoLoja, id),
     loadSenhaSistema, saveSenhaSistema,
     loadEmailRecuperacao, saveEmailRecuperacao,
-   limparColecao, importarEmMassa,
-    backfillDataISO, diagnosticarFormatosData
+  limparColecao, importarEmMassa,
+    backfillDataISO, diagnosticarFormatosData, diagnosticarDataISO
   };
+
+  // ── DIAGNÓSTICO 2 — compara o que DEVERIA estar no período (calculado
+  // a partir do campo "data", que sabemos que está 100% correto) contra
+  // o que o campo "dataISO" realmente tem gravado. Só leitura. ──
+  async function diagnosticarDataISO(perfil, de, ate) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    const snap = await db.collection(coll).get(); // 1 leitura completa, diagnóstico único
+
+    let semCampoDataISO = 0;
+    let comDataISOErrada = 0;
+    let deveriaEstarNoPeriodo = 0;
+    let realmenteEstaNoPeriodoPeloCampo = 0;
+    const exemplosSemCampo = [];
+    const exemplosErrados = [];
+
+    snap.forEach(doc => {
+      const row = doc.data();
+      const isoCorreto = _dataBRparaISO(row.data); // fonte confiável
+      const dentroDoPeriodo = isoCorreto && isoCorreto >= de && isoCorreto <= ate;
+      if (dentroDoPeriodo) deveriaEstarNoPeriodo++;
+
+      if (row.dataISO === undefined || row.dataISO === null || row.dataISO === '') {
+        semCampoDataISO++;
+        if (exemplosSemCampo.length < 5) exemplosSemCampo.push({ id: doc.id, data: row.data });
+      } else if (row.dataISO !== isoCorreto) {
+        comDataISOErrada++;
+        if (exemplosErrados.length < 5) exemplosErrados.push({ id: doc.id, data: row.data, dataISO_gravado: row.dataISO, dataISO_correto: isoCorreto });
+      } else if (row.dataISO >= de && row.dataISO <= ate) {
+        realmenteEstaNoPeriodoPeloCampo++;
+      }
+    });
+
+    return {
+      totalDocs: snap.size,
+      semCampoDataISO,
+      comDataISOErrada,
+      deveriaEstarNoPeriodo,        // calculado via campo "data" (confiável)
+      realmenteEstaNoPeriodoPeloCampo, // calculado via campo "dataISO" gravado
+      exemplosSemCampo,
+      exemplosErrados
+    };
+  }
 
   // ── DIAGNÓSTICO — só leitura, não grava nada. Roda 1x pra entender
   // que formatos de data existem de verdade na base antes de corrigir. ──
