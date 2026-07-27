@@ -1,6 +1,8 @@
 // ════════════════════════════════════════════════════════════════
-//  POLYFILL — Firestore otimizado (mínimo de leituras)
-//  Carregar DEPOIS de: firebase-app-compat, firestore-compat, firebase-init.js
+//  POLYFILL — Intercepta google.script.run e redireciona para o
+//  Firestore (substitui totalmente o backend /api do Next.js).
+//  Precisa carregar DEPOIS de: firebase-app-compat, firebase-firestore-compat,
+//  firebase-init.js (que expõe window.db).
 // ════════════════════════════════════════════════════════════════
 
 (function () {
@@ -35,7 +37,7 @@
     return (String(perfil || '').toLowerCase() === 'matriz') ? 'Cod_Erros_Matriz' : 'Cod_Erros_Lojas';
   }
 
-  // ── Próximo ID (1 transação) ──
+  // ── Gera próximo ID numérico (equivalente ao auto-incremento das planilhas) ──
   async function _nextId(collName) {
     const db = getDb();
     const ref = db.collection('_counters').doc(collName);
@@ -47,7 +49,6 @@
     });
   }
 
-  // ── Load genérico (só para coleções PEQUENAS) ──
   async function _loadColl(collName) {
     const db = getDb();
     const snap = await db.collection(collName).get();
@@ -78,119 +79,138 @@
     return { ok: true };
   }
 
-  // ── Histórico ────────────────────────────────────────────────
+  // ── Histórico (particionado por perfil) ──
   function _hojeBR() {
     const d = new Date();
-    return String(d.getDate()).padStart(2, '0') + '/' +
-           String(d.getMonth() + 1).padStart(2, '0') + '/' +
-           d.getFullYear();
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
   }
   function _dataBRparaISO(s) {
     if (!s || typeof s !== 'string') return null;
     const p = s.trim().split('/');
     if (p.length === 3 && p[2].length === 4) {
-      return `${p[2]}-${String(p[0]).padStart(2, '0')}-${String(p[1]).padStart(2, '0')}`;
+      return `${p[2]}-${String(p[0]).padStart(2,'0')}-${String(p[1]).padStart(2,'0')}`;
     }
     return null;
   }
-
   async function addHistorico(data) {
     const payload = Object.assign({}, data);
     if (!payload.data) payload.data = _hojeBR();
-    // Sempre grava dataISO — obrigatório para as queries de período
     payload.dataISO = _dataBRparaISO(payload.data) || new Date().toISOString().split('T')[0];
-    return _add(_histColl(payload.perfil), payload);
+    const r = await _add(_histColl(payload.perfil), payload);
+    _histCacheClear();
+    return r;
   }
-
   async function updateHistorico(data) {
-    // Garante dataISO também em updates
-    if (data && data.data && !data.dataISO) {
-      data.dataISO = _dataBRparaISO(data.data);
-    }
-    return _update(_histColl(data && data.perfil), data);
+    const r = await _update(_histColl(data && data.perfil), data);
+    _histCacheClear();
+    return r;
   }
-
   async function deleteHistorico(id, perfil) {
-    return _delete(_histColl(perfil), id);
+    const r = await _delete(_histColl(perfil), id);
+    _histCacheClear();
+    return r;
   }
+  function _parseDataBR(s) {
+    if (!s || typeof s !== 'string') return '1900-01-01';
+    const p = s.trim().split('/');
+    if (p.length === 3) {
+      const dia = String(p[0]).padStart(2, '0');
+      const mes = String(p[1]).padStart(2, '0');
+      const ano = String(p[2]);
+      if (ano.length === 4) return `${ano}-${mes}-${dia}`;
+    }
+    return '1900-01-01';
+  }
+  // ── Cache em memória do histórico por período ──
+  // Evita reler o Firestore quando a mesma consulta é pedida de novo
+  // em sequência (ex: Dashboard e aba Histórico com o mesmo intervalo,
+  // ou reabrir a mesma tela). Expira em 60s para não mostrar dado velho.
+  const _histCache = new Map();
+  const HIST_CACHE_TTL_MS = 60000;
+  function _histCacheKey(perfil, de, ate) { return perfil + '|' + de + '|' + ate; }
+  function _histCacheGet(key) {
+    const hit = _histCache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.t > HIST_CACHE_TTL_MS) { _histCache.delete(key); return null; }
+    return hit.rows;
+  }
+  function _histCacheSet(key, rows) { _histCache.set(key, { rows, t: Date.now() }); }
+  function _histCacheClear() { _histCache.clear(); }
 
-  // ── Query indexada por dataISO (a maior economia de cota) ──
-  // Precisa de índice composto no Console Firebase:
-  // Coleção: Historico_Lojas / Historico_Matriz
-  // Campos: dataISO ASC, id DESC  (ou só dataISO ASC se não ordenar)
   async function loadHistFiltrado(de, ate, perfil) {
+    const cacheKey = _histCacheKey(perfil, de, ate);
+    const cached = _histCacheGet(cacheKey);
+    if (cached) return cached; // 0 leituras no Firestore
+
     const db = getDb();
     const coll = _histColl(perfil);
 
-    // Query de range — lê APENAS os documentos do período
-    let q = db.collection(coll)
+    // Contagem primeiro: no Firestore, uma consulta .count() custa 1 leitura
+    // FIXA, não importa se o período tem 10 ou 10.000 documentos. Isso evita
+    // que alguém escolha sem querer um período gigante e estoure a cota.
+    const countSnap = await db.collection(coll)
       .where('dataISO', '>=', de)
       .where('dataISO', '<=', ate)
-      .orderBy('dataISO', 'asc');
+      .count().get();
+    const total = countSnap.data().count;
 
-    // Limite de segurança (evita explodir a cota em períodos muito longos)
-    // Ajuste conforme necessário. 2000 docs ≈ 2000 leituras.
-    q = q.limit(2000);
+    const LIMITE_SEGURANCA = 3000;
+    if (total > LIMITE_SEGURANCA) {
+      const err = new Error(
+        'Este período tem ' + total + ' registro(s) — reduza o intervalo de datas ' +
+        '(limite de segurança: ' + LIMITE_SEGURANCA + ') para não gastar a cota gratuita de uma vez.'
+      );
+      err.code = 'periodo-grande-demais';
+      err.total = total;
+      throw err;
+    }
 
-    const snap = await q.get();
+    const snap = await db.collection(coll)
+      .where('dataISO', '>=', de)
+      .where('dataISO', '<=', ate)
+      .orderBy('dataISO', 'desc')
+      .get();
     const rows = snap.docs.map(d => d.data());
-
-    // Fallback: se não veio nada e o período é recente, pode ser que
-    // documentos antigos não tenham dataISO. Não fazemos full-scan.
+    _histCacheSet(cacheKey, rows);
     return rows;
   }
 
-  // ── Busca por DANF (já era eficiente) ──
+  // ── Busca direta por DANF: só traz os documentos que batem (leitura barata) ──
   async function buscarDanfNoHistorico(danf, perfil) {
     const db = getDb();
     const coll = _histColl(perfil);
-    const snap = await db.collection(coll)
-      .where('danf', '==', String(danf || '').trim())
-      .limit(20)          // nunca precisa de mais que isso
-      .get();
+    const snap = await db.collection(coll).where('danf', '==', String(danf || '').trim()).get();
     return snap.docs.map(d => d.data());
   }
 
-  // ── Últimos N registros (login + "Carregar Mais") ──
+  // ── Carrega só os últimos N registros do histórico, ordenado por id ──
+  // (evita ler a coleção inteira; usado no login e no "Carregar Mais")
   async function loadHistUltimos(perfil, limite, cursorId) {
     const db = getDb();
     let q = db.collection(_histColl(perfil)).orderBy('id', 'desc');
-
-    if (cursorId != null && cursorId !== '') {
-      q = q.where('id', '<', Number(cursorId));
-    }
+    if (cursorId) q = q.where('id', '<', Number(cursorId));
     q = q.limit(Number(limite) || 100);
-
     const snap = await q.get();
-    // Já vem ordenado desc pelo orderBy
-    return snap.docs.map(d => d.data());
+    const rows = snap.docs.map(d => d.data());
+    rows.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+    return rows;
   }
-
   async function updateHistoricoSituacaoPorDANF(danf, loja, perfil) {
     const db = getDb();
     const coll = _histColl(perfil);
-    const snap = await db.collection(coll)
-      .where('danf', '==', String(danf).trim())
-      .get();
-
-    if (snap.empty) return { ok: false, totalMarcadas: 0 };
-
+    const snap = await db.collection(coll).where('danf', '==', danf).get();
     const batch = db.batch();
     let total = 0;
     snap.forEach(doc => {
       const row = doc.data();
-      const bate = !loja ||
-        String(row.loja || '').trim().toLowerCase() === String(loja).trim().toLowerCase();
-      if (bate) {
-        batch.update(doc.ref, { situacao: 'Lançada' });
-        total++;
-      }
+      const bate = !loja || String(row.loja || '').trim().toLowerCase() === String(loja).trim().toLowerCase();
+      if (bate) { batch.update(doc.ref, { situacao: 'Lançada' }); total++; }
     });
-    if (total > 0) await batch.commit();
+    if (total > 0) { await batch.commit(); _histCacheClear(); }
     return { ok: total > 0, totalMarcadas: total };
   }
 
-  // ── Config / Assinatura ──
+  // ── Assinatura / config por perfil ──
   async function loadAssinatura(perfil) {
     const db = getDb();
     const snap = await db.collection('config').doc(String(perfil)).get();
@@ -202,7 +222,7 @@
     return { ok: true };
   }
 
-  // ── Senha do sistema ──
+  // ── Senha única do sistema ──
   async function loadSenhaSistema() {
     const db = getDb();
     const snap = await db.collection('config').doc('sistema').get();
@@ -213,25 +233,20 @@
     const ref = db.collection('config').doc('sistema');
     const snap = await ref.get();
     const senhaSalva = snap.exists ? (snap.data().senha || '@mudar') : '@mudar';
-    if (String(atual) !== String(senhaSalva)) {
-      return { ok: false, msg: 'Senha atual incorreta!' };
-    }
+    if (String(atual) !== String(senhaSalva)) return { ok: false, msg: 'Senha atual incorreta!' };
     await ref.set({ senha: nova }, { merge: true });
-
+    // Espelha a senha atualizada no diretório central, pra o ADM sempre
+    // ver a senha em dia sem precisar entrar no banco de cada cliente.
     if (window.dbCentral && window.CURRENT_USUARIO_ID) {
       try {
         await window.dbCentral.collection('usuarios').doc(window.CURRENT_USUARIO_ID)
-          .update({
-            senhaSistemaAtual: nova,
-            senhaSistemaAtualizadaEm: new Date().toISOString()
-          });
-      } catch (e) {
-        console.error('[Polyfill] Falha ao espelhar senha:', e);
-      }
+          .update({ senhaSistemaAtual: nova, senhaSistemaAtualizadaEm: new Date().toISOString() });
+      } catch (e) { console.error('[Polyfill] Falha ao espelhar senha para o diretório central:', e); }
     }
     return { ok: true };
   }
 
+  // ── E-mail de recuperação da senha do sistema ──
   async function loadEmailRecuperacao() {
     const db = getDb();
     const snap = await db.collection('config').doc('sistema').get();
@@ -239,51 +254,40 @@
   }
   async function saveEmailRecuperacao(email) {
     const db = getDb();
-    await db.collection('config').doc('sistema')
-      .set({ emailRecuperacao: String(email || '').trim() }, { merge: true });
+    await db.collection('config').doc('sistema').set({ emailRecuperacao: String(email || '').trim() }, { merge: true });
     return { ok: true };
   }
 
-  // ── Regras ──
+  // ── Regras de destinatários por erro ──
   async function saveAllRegras(regrasArray) {
     const hoje = new Date().toLocaleDateString('pt-BR');
     const existentes = await _loadColl('regras');
     let saved = 0;
     for (const nova of (regrasArray || [])) {
-      const match = existentes.find(r =>
-        r.codErro === nova.codErro && r.descErro === nova.descErro
-      );
+      const match = existentes.find(r => r.codErro === nova.codErro && r.descErro === nova.descErro);
       if (match) {
-        await _update('regras', Object.assign({}, match, {
-          destinatarios: nova.destinatarios,
-          criadoEm: hoje
-        }));
+        await _update('regras', Object.assign({}, match, { destinatarios: nova.destinatarios, criadoEm: hoje }));
         saved++;
       } else if (nova.destinatarios) {
-        await _add('regras', {
-          codErro: nova.codErro,
-          descErro: nova.descErro,
-          destinatarios: nova.destinatarios,
-          criadoEm: hoje
-        });
+        await _add('regras', { codErro: nova.codErro, descErro: nova.descErro, destinatarios: nova.destinatarios, criadoEm: hoje });
         saved++;
       }
     }
     return { ok: true, saved };
   }
 
-  // ── Grupos de loja ──
+  // ── Grupos de loja (add e update pela mesma função) ──
   async function saveGrupoLoja(data) {
     if (!data || !data.id) {
-      return _add(COLLECTIONS.grupoLoja, {
-        grupo: data.grupo,
-        lojas: data.lojas || ''
-      });
+      return _add(COLLECTIONS.grupoLoja, { grupo: data.grupo, lojas: data.lojas || '' });
     }
     return _update(COLLECTIONS.grupoLoja, data);
   }
 
-  // ── Importação em massa (já otimizada com batch de 450) ──
+  // ── Importação em massa (usada pelo botão "Importar Excel") ──
+  // Reserva um bloco de IDs numa única transação e grava tudo em lotes de
+  // até 450 documentos por chamada de batch, em vez de 1 transação + 1
+  // gravação por linha (o que travava com milhares de registros).
   async function importarEmMassa(collName, rows) {
     const db = getDb();
     if (!rows || !rows.length) return { ok: true, importados: 0 };
@@ -296,7 +300,7 @@
       return atual + 1;
     });
 
-    const CHUNK = 450;
+    const CHUNK = 450; // limite do Firestore é 500 operações por batch
     let importados = 0;
     for (let i = 0; i < rows.length; i += CHUNK) {
       const batch = db.batch();
@@ -309,57 +313,52 @@
       await batch.commit();
       importados += parte.length;
     }
+    _histCacheClear();
     return { ok: true, importados, idInicial };
   }
 
-  // ── Limpeza em lote ──
+  // ── Limpeza em lote de uma coleção inteira (usado pelo botão "Limpar Base") ──
   async function limparColecao(collName) {
     const db = getDb();
     const snap = await db.collection(collName).get();
     const docs = snap.docs;
-    const CHUNK = 450;
+    const CHUNK = 450; // limite do Firestore é 500 operações por batch
     for (let i = 0; i < docs.length; i += CHUNK) {
       const batch = db.batch();
       docs.slice(i, i + CHUNK).forEach(d => batch.delete(d.ref));
       await batch.commit();
     }
+    // Reseta o contador de ID para essa coleção, para a próxima importação começar do 1
     await db.collection('_counters').doc(collName).delete().catch(() => {});
+    _histCacheClear();
     return { ok: true, removidos: docs.length };
   }
 
-  // ── loadAll (só 100 do histórico) ──
+  // ── loadAll: junta todas as coleções + histórico do perfil ativo ──
   async function loadAll(perfil) {
-    const [
-      compradores, comerciais, lojas, manifestos,
-      codErros, fornecedores, historico,
-      regras, justificativas, gruposLoja
-    ] = await Promise.all([
-      _loadColl(_compradoresColl(perfil)),
-      _loadColl(COLLECTIONS.comercial),
-      _loadColl(COLLECTIONS.loja),
-      _loadColl(COLLECTIONS.manifesto),
-      _loadColl(_codErrosColl(perfil)),
-      _loadColl(COLLECTIONS.fornecedor),
-      loadHistUltimos(perfil, 100),          // ← nunca mais que 100
-      _loadColl(COLLECTIONS.regra),
-      _loadColl(COLLECTIONS.justificativa),
-      _loadColl(COLLECTIONS.grupoLoja)
-    ]);
-    return {
-      compradores, comerciais, lojas, manifestos,
-      codErros, fornecedores, historico,
-      regras, justificativas, gruposLoja
-    };
+    const [compradores, comerciais, lojas, manifestos, codErros, fornecedores, historico, regras, justificativas, gruposLoja] =
+      await Promise.all([
+        _loadColl(_compradoresColl(perfil)),
+        _loadColl(COLLECTIONS.comercial),
+        _loadColl(COLLECTIONS.loja),
+        _loadColl(COLLECTIONS.manifesto),
+        _loadColl(_codErrosColl(perfil)),
+        _loadColl(COLLECTIONS.fornecedor),
+        loadHistUltimos(perfil, 100), // só os 100 mais recentes — evita ler a coleção inteira em todo login
+        _loadColl(COLLECTIONS.regra),
+        _loadColl(COLLECTIONS.justificativa),
+        _loadColl(COLLECTIONS.grupoLoja)
+      ]);
+    return { compradores, comerciais, lojas, manifestos, codErros, fornecedores, historico, regras, justificativas, gruposLoja };
   }
 
-  // ── Tabela de despacho ──
+  // ── Tabela de despacho: nome do método (chamado por google.script.run.X(...)) → handler ──
   const HANDLERS = {
     loadAll,
     loadHistFiltrado,
     loadHistUltimos,
     buscarDanfNoHistorico,
-    addHistorico, updateHistorico, deleteHistorico,
-    updateHistoricoSituacaoPorDANF,
+    addHistorico, updateHistorico, deleteHistorico, updateHistoricoSituacaoPorDANF,
     loadAssinatura, saveAssinatura,
     addComprador: (d) => _add(_compradoresColl(d && d.perfil), d),
     updateComprador: (d) => _update(_compradoresColl(d && d.perfil), d),
@@ -388,10 +387,36 @@
     deleteGrupoLoja: (id) => _delete(COLLECTIONS.grupoLoja, id),
     loadSenhaSistema, saveSenhaSistema,
     loadEmailRecuperacao, saveEmailRecuperacao,
-    limparColecao, importarEmMassa
+    limparColecao, importarEmMassa,
+    backfillDataISO
   };
 
-  // ── Proxy que imita google.script.run ──
+  // ── BACKFILL — roda UMA VEZ SÓ, pra gravar dataISO nos 5.000+ registros
+  // antigos que não têm o campo (foram importados antes dessa otimização).
+  // Custa 1 leitura completa da coleção (inevitável, é a única vez que
+  // isso precisa acontecer) + grava em lotes só os documentos que faltam.
+  // Depois de rodar 1x com sucesso, pode remover esse bloco e o handler acima.
+  async function backfillDataISO(perfil) {
+    const db = getDb();
+    const coll = _histColl(perfil);
+    const snap = await db.collection(coll).get(); // 1x só, custo aceito e necessário
+    const semData = snap.docs.filter(d => !d.data().dataISO);
+    const CHUNK = 450;
+    let corrigidos = 0;
+    for (let i = 0; i < semData.length; i += CHUNK) {
+      const batch = db.batch();
+      semData.slice(i, i + CHUNK).forEach(doc => {
+        const iso = _dataBRparaISO(doc.data().data) || '1900-01-01';
+        batch.update(doc.ref, { dataISO: iso });
+      });
+      await batch.commit();
+      corrigidos += Math.min(CHUNK, semData.length - i);
+    }
+    _histCacheClear();
+    return { ok: true, totalLido: snap.size, corrigidos };
+  }
+
+  // ── Proxy que imita a API do google.script.run ──
   function makeProxy() {
     const proxy = {
       withSuccessHandler(cb) { this._ok = cb; return this; },
@@ -410,12 +435,13 @@
             }
             if (fail) fail(err); else throw err;
           });
-        return makeProxy();
+        return makeProxy(); // nova instância limpa para a próxima chamada encadeada
       };
     });
     return proxy;
   }
 
   window.google.script.run = makeProxy();
-  console.log('[Polyfill] google.script.run → Firestore otimizado (queries por dataISO + limit 2000)');
+
+  console.log('[Polyfill] google.script.run redirecionado para Firestore com sucesso!');
 })();
