@@ -116,13 +116,33 @@
   // não vai bater e o sistema simplesmente volta a ler a coleção inteira
   // normalmente — nenhum risco de dado desatualizado, só perde a economia
   // nesse caso raro.
+  // ── Persistência do cache no localStorage — sobrevive a F5, fechar
+  // aba, fechar navegador. Assim a "primeira leitura completa da sessão"
+  // só volta a acontecer quando os dados realmente mudaram, não sempre
+  // que a página é recarregada.
+  const LS_PREFIX = 'nfsHistCache_';
+  function _lsSalvarCache(perfilKey, cache) {
+    try { localStorage.setItem(LS_PREFIX + perfilKey, JSON.stringify(cache)); }
+    catch (e) { /* localStorage cheio ou indisponível — segue só com o cache em memória */ }
+  }
+  function _lsCarregarCache(perfilKey) {
+    try {
+      const raw = localStorage.getItem(LS_PREFIX + perfilKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return (parsed && Array.isArray(parsed.rows) && typeof parsed.versao === 'number') ? parsed : null;
+    } catch (e) { return null; }
+  }
+
   function _patchHistCache(perfil, mutate) {
     const perfilKey = _perfilKey(perfil);
-    const cache = _histFull.get(perfilKey);
-    if (!cache) return; // ninguém carregou o histórico ainda nesta sessão — nada a sincronizar
+    const cache = _histFull.get(perfilKey) || _lsCarregarCache(perfilKey);
+    if (!cache) return; // ninguém carregou o histórico ainda neste navegador — nada a sincronizar
     const rows = cache.rows.slice();
     mutate(rows);
-    _histFull.set(perfilKey, { rows, versao: (cache.versao || 0) + 1 });
+    const novoCache = { rows, versao: (cache.versao || 0) + 1 };
+    _histFull.set(perfilKey, novoCache);
+    _lsSalvarCache(perfilKey, novoCache);
   }
 
   async function addHistorico(data) {
@@ -167,7 +187,13 @@
     const metaSnap = await db.collection('_meta').doc(_metaDocId(perfil)).get();
     const versaoAtual = metaSnap.exists ? (metaSnap.data().versao || 0) : 0;
 
-    const cache = _histFull.get(perfilKey);
+    let cache = _histFull.get(perfilKey);
+    if (!cache) {
+      // nada na memória da aba (página recém-aberta) — tenta reaproveitar
+      // o que este navegador já leu numa sessão anterior antes de ir ao Firestore
+      const persistido = _lsCarregarCache(perfilKey);
+      if (persistido) { cache = persistido; _histFull.set(perfilKey, cache); }
+    }
     let rows;
     if (cache && cache.versao === versaoAtual) {
       rows = cache.rows; // reaproveitado — 0 leituras da coleção
@@ -178,7 +204,9 @@
       _histLoadingPromise.set(perfilKey, p);
       try {
         rows = await p; // lê a coleção 1 vez só
-        _histFull.set(perfilKey, { rows, versao: versaoAtual });
+        const novoCache = { rows, versao: versaoAtual };
+        _histFull.set(perfilKey, novoCache);
+        _lsSalvarCache(perfilKey, novoCache);
       } finally {
         _histLoadingPromise.delete(perfilKey);
       }
