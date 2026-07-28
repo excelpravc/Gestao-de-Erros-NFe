@@ -108,21 +108,48 @@
     await ref.set({ versao: firebase.firestore.FieldValue.increment(1) }, { merge: true });
   }
 
+  // ── Mantém o cache em memória sincronizado com a versão que ACABAMOS
+  // de gravar — assim o próximo loadHistFiltrado/gerarDash (chamado logo
+  // em seguida, no mesmo clique de salvar/editar/excluir/copiar) encontra
+  // o cache já batendo com a versão do servidor e NÃO relê a coleção
+  // inteira. Se outro dispositivo gravou algo nesse meio-tempo, a versão
+  // não vai bater e o sistema simplesmente volta a ler a coleção inteira
+  // normalmente — nenhum risco de dado desatualizado, só perde a economia
+  // nesse caso raro.
+  function _patchHistCache(perfil, mutate) {
+    const perfilKey = _perfilKey(perfil);
+    const cache = _histFull.get(perfilKey);
+    if (!cache) return; // ninguém carregou o histórico ainda nesta sessão — nada a sincronizar
+    const rows = cache.rows.slice();
+    mutate(rows);
+    _histFull.set(perfilKey, { rows, versao: (cache.versao || 0) + 1 });
+  }
+
   async function addHistorico(data) {
     const payload = Object.assign({}, data);
     if (!payload.data) payload.data = _hojeBR();
     const r = await _add(_histColl(payload.perfil), payload);
     await _bumpHistVersao(payload.perfil);
+    const fullRow = Object.assign({}, payload, { id: r.id });
+    _patchHistCache(payload.perfil, rows => rows.push(fullRow));
     return r;
   }
   async function updateHistorico(data) {
     const r = await _update(_histColl(data && data.perfil), data);
     await _bumpHistVersao(data && data.perfil);
+    _patchHistCache(data && data.perfil, rows => {
+      const idx = rows.findIndex(x => Number(x.id) === Number(data.id));
+      if (idx >= 0) rows[idx] = Object.assign({}, rows[idx], data);
+    });
     return r;
   }
   async function deleteHistorico(id, perfil) {
     const r = await _delete(_histColl(perfil), id);
     await _bumpHistVersao(perfil);
+    _patchHistCache(perfil, rows => {
+      const idx = rows.findIndex(x => Number(x.id) === Number(id));
+      if (idx >= 0) rows.splice(idx, 1);
+    });
     return r;
   }
 
@@ -189,12 +216,19 @@
     const snap = await db.collection(coll).where('danf', '==', danf).get();
     const batch = db.batch();
     let total = 0;
+    const idsAtualizados = [];
     snap.forEach(doc => {
       const row = doc.data();
       const bate = !loja || String(row.loja || '').trim().toLowerCase() === String(loja).trim().toLowerCase();
-      if (bate) { batch.update(doc.ref, { situacao: 'Lançada' }); total++; }
+      if (bate) { batch.update(doc.ref, { situacao: 'Lançada' }); total++; idsAtualizados.push(row.id); }
     });
-    if (total > 0) { await batch.commit(); await _bumpHistVersao(perfil); }
+    if (total > 0) {
+      await batch.commit();
+      await _bumpHistVersao(perfil);
+      _patchHistCache(perfil, rows => {
+        rows.forEach(r => { if (idsAtualizados.includes(r.id)) r.situacao = 'Lançada'; });
+      });
+    }
     return { ok: total > 0, totalMarcadas: total };
   }
 
