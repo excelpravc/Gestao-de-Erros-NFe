@@ -41,6 +41,10 @@ async function _initTenantFirebase(cfg) {
     return window.dbTenant;
   }
   if (existente) {
+    // Cancela os listeners em tempo real do histórico antes de derrubar
+    // o app antigo — senão ficam "escutando" uma conexão que não existe
+    // mais.
+    if (typeof window.__cancelarListenersHistorico === 'function') window.__cancelarListenersHistorico();
     // IMPORTANTE: precisa aguardar o delete terminar antes de criar o
     // próximo app 'tenant' — sem o await, o Firestore novo nasce numa
     // condição de corrida com o antigo sendo destruído e algumas
