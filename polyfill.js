@@ -313,10 +313,7 @@
       importados += parte.length;
     }
 
-    if (collName === 'Historico_Lojas') await _bumpHistVersao('Lojas');
-    if (collName === 'Historico_Matriz') await _bumpHistVersao('Matriz');
-
-    return { ok: true, importados, idInicial };
+    ireturn { ok: true, importados, idInicial };
   }
 
   // ── Limpeza em lote de uma coleção inteira ──
@@ -332,10 +329,7 @@
     }
     await db.collection('_counters').doc(collName).delete().catch(() => {});
 
-    if (collName === 'Historico_Lojas') await _bumpHistVersao('Lojas');
-    if (collName === 'Historico_Matriz') await _bumpHistVersao('Matriz');
-
-    return { ok: true, removidos: docs.length };
+   return { ok: true, removidos: docs.length };
   }
 
   // ── loadAll: junta todas as coleções + histórico do perfil ativo ──
