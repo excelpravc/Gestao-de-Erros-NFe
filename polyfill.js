@@ -313,7 +313,7 @@
       importados += parte.length;
     }
 
-    ireturn { ok: true, importados, idInicial };
+    return { ok: true, importados, idInicial };
   }
 
   // ── Limpeza em lote de uma coleção inteira ──
