@@ -93,125 +93,86 @@
     return '1900-01-01';
   }
 
-  // ── Cache do histórico inteiro em memória, por perfil ──
-  // Só relê a coleção do Firestore quando a "versão" (documento em _meta)
-  // mudar — ou seja, quando alguém realmente grava/edita/apaga um registro.
-  // Enquanto ninguém escreve nada, qualquer troca de período, de aba, ou
-  // re-clique em "Buscar" reaproveita o que já está em memória.
-  const _histFull = new Map(); // perfilKey -> { rows, versao }
+  // ── Histórico: sincronizado em tempo real via onSnapshot ──
+  // Antes: cada abertura de Dashboard/Histórico conferia uma "versão" e,
+  // se QUALQUER usuário (de qualquer loja) tivesse gravado algo desde a
+  // última vez, relia a coleção inteira (5.000+ documentos) de novo. Como
+  // várias lojas usam o sistema o dia todo, a versão muda a cada poucos
+  // minutos — e isso derrubava o cache pra todo mundo, não só pra quem
+  // gravou. O localStorage não resolvia isso: ele guardava a MESMA versão
+  // que já estava caindo o tempo todo.
+  //
+  // Agora: existe só 1 listener em tempo real por perfil, aberto a sessão
+  // inteira. Ele paga a leitura completa da coleção 1 única vez (quando é
+  // aberto pela primeira vez nesta aba) e, depois disso, o Firestore só
+  // cobra 1 leitura para cada documento que for realmente criado, editado
+  // ou apagado — não importa quem fez a gravação. Nunca mais uma
+  // releitura da coleção inteira.
+  const _histFull = new Map();       // perfilKey -> array de linhas, sempre em dia
+  const _histListeners = new Map();  // perfilKey -> função pra cancelar o onSnapshot
+  const _histReady = new Map();      // perfilKey -> Promise resolvida na 1ª leitura
+
   function _perfilKey(perfil) { return String(perfil || '').toLowerCase() === 'matriz' ? 'matriz' : 'lojas'; }
-  function _metaDocId(perfil) { return 'historico_' + _perfilKey(perfil); }
 
-  async function _bumpHistVersao(perfil) {
-    const db = getDb();
-    const ref = db.collection('_meta').doc(_metaDocId(perfil));
-    await ref.set({ versao: firebase.firestore.FieldValue.increment(1) }, { merge: true });
-  }
-
-  // ── Mantém o cache em memória sincronizado com a versão que ACABAMOS
-  // de gravar — assim o próximo loadHistFiltrado/gerarDash (chamado logo
-  // em seguida, no mesmo clique de salvar/editar/excluir/copiar) encontra
-  // o cache já batendo com a versão do servidor e NÃO relê a coleção
-  // inteira. Se outro dispositivo gravou algo nesse meio-tempo, a versão
-  // não vai bater e o sistema simplesmente volta a ler a coleção inteira
-  // normalmente — nenhum risco de dado desatualizado, só perde a economia
-  // nesse caso raro.
-  // ── Persistência do cache no localStorage — sobrevive a F5, fechar
-  // aba, fechar navegador. Assim a "primeira leitura completa da sessão"
-  // só volta a acontecer quando os dados realmente mudaram, não sempre
-  // que a página é recarregada.
-  const LS_PREFIX = 'nfsHistCache_';
-  function _lsSalvarCache(perfilKey, cache) {
-    try { localStorage.setItem(LS_PREFIX + perfilKey, JSON.stringify(cache)); }
-    catch (e) { /* localStorage cheio ou indisponível — segue só com o cache em memória */ }
-  }
-  function _lsCarregarCache(perfilKey) {
-    try {
-      const raw = localStorage.getItem(LS_PREFIX + perfilKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return (parsed && Array.isArray(parsed.rows) && typeof parsed.versao === 'number') ? parsed : null;
-    } catch (e) { return null; }
-  }
-
-  function _patchHistCache(perfil, mutate) {
+  function _garantirListenerHistorico(perfil) {
     const perfilKey = _perfilKey(perfil);
-    const cache = _histFull.get(perfilKey) || _lsCarregarCache(perfilKey);
-    if (!cache) return; // ninguém carregou o histórico ainda neste navegador — nada a sincronizar
-    const rows = cache.rows.slice();
-    mutate(rows);
-    const novoCache = { rows, versao: (cache.versao || 0) + 1 };
-    _histFull.set(perfilKey, novoCache);
-    _lsSalvarCache(perfilKey, novoCache);
+    if (_histReady.has(perfilKey)) return _histReady.get(perfilKey); // já existe — reaproveita
+
+    const db = getDb();
+    const coll = _histColl(perfil);
+    _histFull.set(perfilKey, []);
+    let resolveReady;
+    const ready = new Promise(res => { resolveReady = res; });
+    let primeiraLeitura = true;
+
+    const cancelar = db.collection(coll).onSnapshot(snap => {
+      const rows = _histFull.get(perfilKey);
+      snap.docChanges().forEach(change => {
+        const data = change.doc.data();
+        const idx = rows.findIndex(r => String(r.id) === String(data.id));
+        if (change.type === 'removed') {
+          if (idx >= 0) rows.splice(idx, 1);
+        } else if (idx >= 0) {
+          rows[idx] = data;
+        } else {
+          rows.push(data);
+        }
+      });
+      if (primeiraLeitura) { primeiraLeitura = false; resolveReady(); }
+    }, err => {
+      console.error('[Firestore] Listener do histórico (' + coll + ') caiu:', err);
+    });
+
+    _histListeners.set(perfilKey, cancelar);
+    _histReady.set(perfilKey, ready);
+    return ready;
   }
+
+  // Chamado antes de trocar de banco (ex.: troca de cliente logado) pra
+  // não deixar listener "órfão" apontando pra uma conexão que já foi
+  // destruída.
+  window.__cancelarListenersHistorico = function () {
+    _histListeners.forEach(cancelar => { try { cancelar(); } catch (e) {} });
+    _histListeners.clear();
+    _histReady.clear();
+    _histFull.clear();
+  };
 
   async function addHistorico(data) {
     const payload = Object.assign({}, data);
     if (!payload.data) payload.data = _hojeBR();
-    const r = await _add(_histColl(payload.perfil), payload);
-    await _bumpHistVersao(payload.perfil);
-    const fullRow = Object.assign({}, payload, { id: r.id });
-    _patchHistCache(payload.perfil, rows => rows.push(fullRow));
-    return r;
+    return _add(_histColl(payload.perfil), payload);
   }
   async function updateHistorico(data) {
-    const r = await _update(_histColl(data && data.perfil), data);
-    await _bumpHistVersao(data && data.perfil);
-    _patchHistCache(data && data.perfil, rows => {
-      const idx = rows.findIndex(x => Number(x.id) === Number(data.id));
-      if (idx >= 0) rows[idx] = Object.assign({}, rows[idx], data);
-    });
-    return r;
+    return _update(_histColl(data && data.perfil), data);
   }
   async function deleteHistorico(id, perfil) {
-    const r = await _delete(_histColl(perfil), id);
-    await _bumpHistVersao(perfil);
-    _patchHistCache(perfil, rows => {
-      const idx = rows.findIndex(x => Number(x.id) === Number(id));
-      if (idx >= 0) rows.splice(idx, 1);
-    });
-    return r;
+    return _delete(_histColl(perfil), id);
   }
 
-  // Guarda a leitura completa que já está "em voo" para cada perfil — se
-  // duas telas pedirem loadHistFiltrado ao mesmo tempo logo após uma
-  // gravação (cache ainda desatualizado nas duas), a segunda chamada
-  // reaproveita a mesma leitura em vez de disparar outra em paralelo.
-  const _histLoadingPromise = new Map(); // perfilKey -> Promise<rows>
-
   async function loadHistFiltrado(de, ate, perfil) {
-    const db = getDb();
-    const perfilKey = _perfilKey(perfil);
-
-    // 1 leitura barata: só confere se algo mudou desde o último carregamento
-    const metaSnap = await db.collection('_meta').doc(_metaDocId(perfil)).get();
-    const versaoAtual = metaSnap.exists ? (metaSnap.data().versao || 0) : 0;
-
-    let cache = _histFull.get(perfilKey);
-    if (!cache) {
-      // nada na memória da aba (página recém-aberta) — tenta reaproveitar
-      // o que este navegador já leu numa sessão anterior antes de ir ao Firestore
-      const persistido = _lsCarregarCache(perfilKey);
-      if (persistido) { cache = persistido; _histFull.set(perfilKey, cache); }
-    }
-    let rows;
-    if (cache && cache.versao === versaoAtual) {
-      rows = cache.rows; // reaproveitado — 0 leituras da coleção
-    } else if (_histLoadingPromise.has(perfilKey)) {
-      rows = await _histLoadingPromise.get(perfilKey); // reaproveita a leitura já em andamento
-    } else {
-      const p = _loadColl(_histColl(perfil));
-      _histLoadingPromise.set(perfilKey, p);
-      try {
-        rows = await p; // lê a coleção 1 vez só
-        const novoCache = { rows, versao: versaoAtual };
-        _histFull.set(perfilKey, novoCache);
-        _lsSalvarCache(perfilKey, novoCache);
-      } finally {
-        _histLoadingPromise.delete(perfilKey);
-      }
-    }
-
+    await _garantirListenerHistorico(perfil);
+    const rows = _histFull.get(_perfilKey(perfil));
     return rows.filter(r => {
       const d = _parseDataBR(r.data);
       return d >= de && d <= ate;
@@ -244,19 +205,12 @@
     const snap = await db.collection(coll).where('danf', '==', danf).get();
     const batch = db.batch();
     let total = 0;
-    const idsAtualizados = [];
     snap.forEach(doc => {
       const row = doc.data();
       const bate = !loja || String(row.loja || '').trim().toLowerCase() === String(loja).trim().toLowerCase();
-      if (bate) { batch.update(doc.ref, { situacao: 'Lançada' }); total++; idsAtualizados.push(row.id); }
+      if (bate) { batch.update(doc.ref, { situacao: 'Lançada' }); total++; }
     });
-    if (total > 0) {
-      await batch.commit();
-      await _bumpHistVersao(perfil);
-      _patchHistCache(perfil, rows => {
-        rows.forEach(r => { if (idsAtualizados.includes(r.id)) r.situacao = 'Lançada'; });
-      });
-    }
+    if (total > 0) { await batch.commit(); }
     return { ok: total > 0, totalMarcadas: total };
   }
 
